@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-white: #fafafa;
+  --color-off-white: #f2f1ef;
+  --color-warm-gray: #e8e6e1;
+  --color-mid-gray: #b0ada6;
+  --color-dark-gray: #6b6760;
+  --color-charcoal: #2c2a26;
+  --color-black: #141310;
+
+  --color-tt-red: #c8102e;
+  --color-tt-red-deep: #a00d24;
+  --color-tt-red-light: #fde8ec;
+}
+
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: var(--color-tt-red);
+    color: #fff;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-white);
+    color: var(--color-black);
+    font-family: var(--font-sans);
+  }
+
+  /* Dark mode — swap light/dark ends, keep red */
+  .dark {
+    --color-white: #141310;
+    --color-off-white: #1c1a17;
+    --color-warm-gray: #2c2a26;
+    --color-mid-gray: #6b6760;
+    --color-dark-gray: #b0ada6;
+    --color-charcoal: #e8e6e1;
+    --color-black: #fafafa;
+    --color-tt-red-light: #2a0a10;
+  }
+
+  /* Elements that should always stay dark (terminals, code blocks) */
+  .preserve-dark {
+    --color-white: #fafafa;
+    --color-off-white: #f2f1ef;
+    --color-warm-gray: #e8e6e1;
+    --color-mid-gray: #b0ada6;
+    --color-dark-gray: #6b6760;
+    --color-charcoal: #2c2a26;
+    --color-black: #141310;
+  }
+
+  /* Text/bg that must stay fixed regardless of theme */
+  .text-force-white { color: #fafafa !important; }
+  .text-force-black { color: #141310 !important; }
+  .bg-force-white { background-color: #fafafa !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
