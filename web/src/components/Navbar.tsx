@@ -94,7 +94,7 @@ export function Navbar() {
             <ThemeIcon size={15} strokeWidth={2} />
           </button>
           <a
-            href="https://github.com/Joshva02/company-registry-api"
+            href="https://github.com/Joshva02/ovaso"
             target="_blank"
             rel="noopener noreferrer"
             className="bg-black text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-charcoal active:scale-[0.96] transition-all no-underline"

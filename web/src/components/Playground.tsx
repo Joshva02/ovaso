@@ -43,7 +43,8 @@ export function Playground() {
         transition={{ duration: 0.45, delay: 0.1, ease }}
         className="text-dark-gray text-[15px] mb-10 max-w-[520px]"
       >
-        Test the API directly from your browser.
+        Test the API directly from your browser. First request may take
+        ~30s if the server is waking up.
       </motion.p>
 
       <motion.div

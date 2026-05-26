@@ -30,20 +30,20 @@ No API key. No sign-up. Just fetch.
 
 ```bash
 # Check if a business is registered
-curl "https://ovaso.vercel.app/check?name=guardian+holdings+limited"
+curl "https://ovaso.onrender.com/check?name=guardian+holdings+limited"
 
 # Search companies by name
-curl "https://ovaso.vercel.app/search?name=massy"
+curl "https://ovaso.onrender.com/search?name=massy"
 
 # Search name reservations
-curl "https://ovaso.vercel.app/reservations?name=island"
+curl "https://ovaso.onrender.com/reservations?name=island"
 ```
 
 ### JavaScript
 
 ```js
 const res = await fetch(
-  "https://ovaso.vercel.app/check?name=guardian+holdings+limited"
+  "https://ovaso.onrender.com/check?name=guardian+holdings+limited"
 );
 const data = await res.json();
 
@@ -58,7 +58,7 @@ if (data.is_registered) {
 import requests
 
 res = requests.get(
-    "https://ovaso.vercel.app/check",
+    "https://ovaso.onrender.com/check",
     params={"name": "guardian holdings limited"}
 )
 data = res.json()
@@ -76,7 +76,7 @@ if data["is_registered"]:
 | `GET` | `/reservations?name=` | Search name reservations |
 | `GET` | `/health` | API health check |
 
-All endpoints return JSON. See the [full documentation](https://ovaso.vercel.app/docs) for response schemas and examples.
+All endpoints return JSON. See the [full documentation](https://ovaso.onrender.com/docs) for response schemas and examples.
 
 ## Example response
 
@@ -105,6 +105,8 @@ All endpoints return JSON. See the [full documentation](https://ovaso.vercel.app
 - **30 requests/minute** per IP
 - Responses cached for 5 minutes server-side
 - Cached responses don't count toward the rate limit
+
+> **Note:** The API runs on a free-tier server that sleeps after 15 minutes of inactivity. The first request after a cold start may take ~30 seconds. Subsequent requests are fast. If there's enough demand, I'll upgrade to an always-on instance.
 
 ## Self-hosting
 

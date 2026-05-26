@@ -13,7 +13,7 @@ export const ENDPOINTS = [
         description: "Business name to check (min 2 chars)",
       },
     ],
-    request: `curl "https://ovaso.vercel.app/check?name=guardian+holdings+limited"`,
+    request: `curl "https://ovaso.onrender.com/check?name=guardian+holdings+limited"`,
     response: `{
   "query": "guardian holdings limited",
   "is_registered": true,
@@ -56,7 +56,7 @@ export const ENDPOINTS = [
         description: "Company or business name (min 2 chars)",
       },
     ],
-    request: `curl "https://ovaso.vercel.app/search?name=massy"`,
+    request: `curl "https://ovaso.onrender.com/search?name=massy"`,
     response: `{
   "query": "massy",
   "total_results": 24,
@@ -99,7 +99,7 @@ export const ENDPOINTS = [
         description: "Proposed name to search (min 2 chars)",
       },
     ],
-    request: `curl "https://ovaso.vercel.app/reservations?name=island"`,
+    request: `curl "https://ovaso.onrender.com/reservations?name=island"`,
     response: `{
   "query": "island",
   "total_results": 12,

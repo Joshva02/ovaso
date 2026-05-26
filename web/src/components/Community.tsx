@@ -52,7 +52,7 @@ export function Community() {
             pointerClassName="text-tt-red"
           >
             <a
-              href="https://github.com/Joshva02/company-registry-api"
+              href="https://github.com/Joshva02/ovaso"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-tt-red hover:text-tt-red-deep transition-colors duration-150 no-underline px-1.5 py-0.5"
