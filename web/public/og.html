@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1200px;
+    height: 630px;
+    background: #141310;
+    font-family: system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Subtle dot grid — more refined than lines */
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, #2c2a26 1px, transparent 1px);
+    background-size: 32px 32px;
+    opacity: 0.5;
+  }
+
+  /* Red accent strip on left edge — structural, not decorative */
+  .edge-accent {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: #c8102e;
+  }
+
+  /* Main layout: two-column asymmetric split */
+  .layout {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    height: 100%;
+  }
+
+  /* Left column: identity + description */
+  .col-left {
+    flex: 0 0 520px;
+    padding: 72px 0 72px 64px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* Right column: terminal proof */
+  .col-right {
+    flex: 1;
+    padding: 72px 64px 72px 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+  }
+
+  /* Logo + wordmark */
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 32px;
+  }
+
+  .wordmark {
+    font-size: 56px;
+    font-weight: 800;
+    color: #fafafa;
+    letter-spacing: -3px;
+    line-height: 1;
+  }
+
+  /* Tagline */
+  .tagline {
+    font-size: 24px;
+    color: #9d9a93;
+    line-height: 1.55;
+    letter-spacing: -0.3px;
+    font-weight: 400;
+    max-width: 400px;
+  }
+
+  .tagline strong {
+    color: #fafafa;
+    font-weight: 600;
+  }
+
+  /* Credibility tags */
+  .tags {
+    display: flex;
+    gap: 12px;
+    margin-top: 36px;
+  }
+
+  .tag {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #9d9a93;
+    border: 1px solid #2c2a26;
+    padding: 6px 14px;
+    border-radius: 2px;
+  }
+
+  .tag--accent {
+    color: #c8102e;
+    border-color: #c8102e33;
+    background: #c8102e0a;
+  }
+
+  /* Terminal block — the hero proof element */
+  .terminal {
+    width: 520px;
+    background: #1a1917;
+    border: 1px solid #2c2a26;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .terminal-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #2c2a26;
+  }
+
+  .terminal-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #2c2a26;
+  }
+
+  .terminal-body {
+    padding: 20px 22px;
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', monospace;
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+
+  /* Command line */
+  .line {
+    display: flex;
+    gap: 0;
+    white-space: nowrap;
+  }
+
+  .prompt {
+    color: #c8102e;
+    margin-right: 10px;
+    user-select: none;
+  }
+
+  .cmd {
+    color: #fafafa;
+    font-weight: 500;
+  }
+
+  .flag {
+    color: #6b6760;
+  }
+
+  .url-text {
+    color: #fafafa;
+  }
+
+  /* Response block */
+  .response {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #2c2a2622;
+  }
+
+  .json-brace { color: #6b6760; }
+  .json-key { color: #9d9a93; }
+  .json-string { color: #fafafa; }
+  .json-bool-true { color: #c8102e; }
+  .json-number { color: #c8102e; }
+
+  /* URL footer */
+  .site-url {
+    position: absolute;
+    bottom: 28px;
+    right: 64px;
+    z-index: 2;
+    font-family: ui-monospace, 'SF Mono', monospace;
+    font-size: 13px;
+    color: #4a4740;
+    letter-spacing: 0.5px;
+  }
+
+  /* Corner marker — bottom-left balance */
+  .corner-mark {
+    position: absolute;
+    bottom: 28px;
+    left: 64px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .corner-mark .dot {
+    width: 6px;
+    height: 6px;
+    background: #c8102e;
+    border-radius: 50%;
+  }
+
+  .corner-mark span {
+    font-size: 12px;
+    color: #4a4740;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="edge-accent"></div>
+
+  <div class="layout">
+    <!-- Left: Identity -->
+    <div class="col-left">
+      <div class="logo-row">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="58" height="58" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M 22 100 L 61 32.5 L 139 32.5" stroke="#fafafa" stroke-width="9"/>
+          <path d="M 139 167.5 L 61 167.5 L 22 100" stroke="#fafafa" stroke-width="9"/>
+          <path d="M 139 32.5 L 178 100 L 139 167.5" stroke="#c8102e" stroke-width="9"/>
+          <path d="M 82 70 Q 72 70 72 80 L 72 92 Q 72 100 64 100 Q 72 100 72 108 L 72 120 Q 72 130 82 130" stroke="#fafafa" stroke-width="7"/>
+          <path d="M 118 70 Q 128 70 128 80 L 128 92 Q 128 100 136 100 Q 128 100 128 108 L 128 120 Q 128 130 118 130" stroke="#fafafa" stroke-width="7"/>
+          <line x1="88" y1="93" x2="112" y2="93" stroke="#fafafa" stroke-width="7"/>
+          <line x1="88" y1="107" x2="112" y2="107" stroke="#c8102e" stroke-width="7"/>
+        </svg>
+        <span class="wordmark">Ovaso</span>
+      </div>
+
+      <div class="tagline">
+        Verify businesses registered in <strong>Trinidad & Tobago</strong> with a single API call.
+      </div>
+
+      <div class="tags">
+        <span class="tag tag--accent">Free</span>
+        <span class="tag">Open Source</span>
+        <span class="tag">No API Key</span>
+      </div>
+    </div>
+
+    <!-- Right: Terminal proof -->
+    <div class="col-right">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot"></div>
+          <div class="terminal-dot"></div>
+          <div class="terminal-dot"></div>
+        </div>
+        <div class="terminal-body">
+          <div class="line">
+            <span class="prompt">$</span>
+            <span class="cmd">curl </span>
+            <span class="flag">-s </span>
+            <span class="url-text">ovaso.onrender.com/check?name=massy</span>
+          </div>
+          <div class="response">
+            <div><span class="json-brace">{</span></div>
+            <div>&nbsp;&nbsp;<span class="json-key">"found"</span><span class="json-brace">:</span> <span class="json-bool-true">true</span><span class="json-brace">,</span></div>
+            <div>&nbsp;&nbsp;<span class="json-key">"count"</span><span class="json-brace">:</span> <span class="json-number">4</span><span class="json-brace">,</span></div>
+            <div>&nbsp;&nbsp;<span class="json-key">"businesses"</span><span class="json-brace">:</span> <span class="json-brace">[</span></div>
+            <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-brace">{</span></div>
+            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"name"</span><span class="json-brace">:</span> <span class="json-string">"Massy Holdings Ltd"</span><span class="json-brace">,</span></div>
+            <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-key">"status"</span><span class="json-brace">:</span> <span class="json-string">"Registered"</span></div>
+            <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="json-brace">}</span></div>
+            <div>&nbsp;&nbsp;<span class="json-brace">]</span></div>
+            <div><span class="json-brace">}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="corner-mark">
+    <div class="dot"></div>
+    <span>REST API</span>
+  </div>
+  <div class="site-url">ovaso.vercel.app</div>
+</body>
+</html>
