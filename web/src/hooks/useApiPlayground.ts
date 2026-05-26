@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { API_BASE } from "@/utils/config";
 
 type Endpoint = "/check" | "/search" | "/reservations";
 
@@ -34,7 +35,7 @@ export function useApiPlayground() {
 
     try {
       const res = await fetch(
-        `${state.endpoint}?name=${encodeURIComponent(state.query.trim())}`
+        `${API_BASE}${state.endpoint}?name=${encodeURIComponent(state.query.trim())}`
       );
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const data = await res.json();
