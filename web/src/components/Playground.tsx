@@ -61,9 +61,10 @@ export function Playground() {
           <form onSubmit={handleSubmit} className="flex gap-2 mb-4 flex-wrap sm:flex-nowrap">
             <select
               value={endpoint}
-              onChange={(e) => setEndpoint(e.target.value as "/check" | "/search" | "/reservations")}
+              onChange={(e) => setEndpoint(e.target.value as "/credibility" | "/check" | "/search" | "/reservations")}
               className="font-mono text-sm font-medium px-3 py-2.5 border-[1.5px] border-mid-gray rounded bg-white outline-none focus:border-black transition-colors cursor-pointer"
             >
+              <option value="/credibility">/credibility</option>
               <option value="/check">/check</option>
               <option value="/search">/search</option>
               <option value="/reservations">/reservations</option>

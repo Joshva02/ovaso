@@ -60,3 +60,48 @@ export function searchReservations(name: string) {
     `/reservations?name=${encodeURIComponent(name)}`
   );
 }
+
+export interface WebPresence {
+  website_url: string | null;
+  website_live: boolean;
+  website_ssl: boolean;
+  social_media: Record<string, string>;
+  has_maps_listing: boolean;
+  maps_url: string | null;
+  search_results_count: number;
+  news_mentions: number;
+  review_snippets: Array<{ source: string; snippet: string; url: string }>;
+}
+
+export interface ScoreBreakdown {
+  registry_score: number;
+  registry_max: number;
+  registry_details: Record<string, unknown>;
+  web_presence_score: number;
+  web_presence_max: number;
+  web_presence_details: Record<string, unknown>;
+  social_media_score: number;
+  social_media_max: number;
+  social_media_details: Record<string, unknown>;
+  reviews_score: number;
+  reviews_max: number;
+  reviews_details: Record<string, unknown>;
+}
+
+export interface CredibilityResponse {
+  query: string;
+  credibility_score: number;
+  credibility_label: string;
+  is_registered: boolean;
+  registry_match: Company | null;
+  web_presence: WebPresence;
+  score_breakdown: ScoreBreakdown;
+  show_claim_prompt: boolean;
+  improvement_tips: string[];
+}
+
+export function checkCredibility(name: string) {
+  return fetchJSON<CredibilityResponse>(
+    `/credibility?name=${encodeURIComponent(name)}`
+  );
+}

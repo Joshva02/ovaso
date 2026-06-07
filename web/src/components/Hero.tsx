@@ -3,7 +3,7 @@ import { FlipText } from "./ui/flip-text";
 import { SquigglyText } from "./ui/squiggly-text";
 import { ArrowDown } from "lucide-react";
 
-const FLIP_WORDS = ["registered", "incorporated", "reserved", "active"];
+const FLIP_WORDS = ["registered", "credible", "incorporated", "active"];
 
 const fadeUp = {
   initial: { opacity: 0, y: 20 },
@@ -62,8 +62,8 @@ export function Hero() {
         transition={{ duration: 0.5, delay: 0.18 }}
         className="mt-5 text-lg text-dark-gray max-w-[480px] leading-relaxed"
       >
-        A free, public REST API to verify businesses against the Registrar
-        General's Department. No API key required — just fetch.
+        A free, public REST API to verify and score the credibility of businesses
+        in Trinidad & Tobago. No API key required — just fetch.
       </motion.p>
 
       <motion.div

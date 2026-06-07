@@ -24,6 +24,8 @@ Trinidad & Tobago has no public API for its business registry. The only way to c
 
 **Ovaso wraps the RGD registry in a clean REST API** so developers, startups, and anyone in T&T can verify business registrations from their own apps — for free, with zero sign-up.
 
+With the new **Credibility Score** feature, Ovaso goes beyond registry lookups — it scrapes the web to find a business's website, social media profiles, Google Maps listing, and review mentions, then calculates a credibility score out of 100.
+
 ## Quick start
 
 No API key. No sign-up. Just fetch.
@@ -31,6 +33,9 @@ No API key. No sign-up. Just fetch.
 ```bash
 # Check if a business is registered
 curl "https://ovaso.onrender.com/check?name=guardian+holdings+limited"
+
+# Get a full credibility score
+curl "https://ovaso.onrender.com/credibility?name=massy+holdings"
 
 # Search companies by name
 curl "https://ovaso.onrender.com/search?name=massy"
@@ -72,13 +77,14 @@ if data["is_registered"]:
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/check?name=` | Check if a business name is registered (recommended) |
+| `GET` | `/credibility?name=` | Full credibility score with web presence analysis |
 | `GET` | `/search?name=` | Search registered companies |
 | `GET` | `/reservations?name=` | Search name reservations |
 | `GET` | `/health` | API health check |
 
 All endpoints return JSON. See the [full documentation](https://ovaso.onrender.com/docs) for response schemas and examples.
 
-## Example response
+## Example response — `/check`
 
 ```json
 {
@@ -100,9 +106,65 @@ All endpoints return JSON. See the [full documentation](https://ovaso.onrender.c
 }
 ```
 
+## Example response — `/credibility`
+
+```json
+{
+  "query": "massy holdings",
+  "credibility_score": 78,
+  "credibility_label": "Moderate Credibility",
+  "is_registered": true,
+  "registry_match": {
+    "company_name": "MASSY HOLDINGS LTD.",
+    "record_status": "ACTIVE (CONTINUED)",
+    "registration_date": "07/01/1983"
+  },
+  "web_presence": {
+    "website_url": "https://massygroup.com",
+    "website_live": true,
+    "website_ssl": true,
+    "social_media": {
+      "facebook": "https://facebook.com/massygroup",
+      "linkedin": "https://linkedin.com/company/massy-group"
+    },
+    "has_maps_listing": true,
+    "search_results_count": 15,
+    "news_mentions": 3
+  },
+  "score_breakdown": {
+    "registry_score": 30,
+    "registry_max": 30,
+    "web_presence_score": 21,
+    "web_presence_max": 25,
+    "social_media_score": 15,
+    "social_media_max": 25,
+    "reviews_score": 10,
+    "reviews_max": 20
+  },
+  "show_claim_prompt": false,
+  "improvement_tips": []
+}
+```
+
+## Credibility score methodology
+
+The credibility score (0-100) evaluates four categories:
+
+| Category | Max Points | What it checks |
+|----------|-----------|----------------|
+| **Registry** | 30 | RGD registration, active status, years registered |
+| **Web Presence** | 25 | Has website, website is live, SSL, search visibility, news mentions |
+| **Social Media** | 25 | Facebook, Instagram, LinkedIn, Twitter/X, Google Maps |
+| **Reviews** | 20 | Review mentions found online, across multiple platforms |
+
+For businesses scoring below 60, the API returns `show_claim_prompt: true` and an `improvement_tips` array with actionable suggestions to improve their score.
+
+See [TERMS.md](TERMS.md) for the full methodology breakdown with point values for each signal.
+
 ## Rate limits
 
-- **30 requests/minute** per IP
+- **30 requests/minute** per IP (standard endpoints)
+- **15 requests/minute** per IP (`/credibility` — involves web scraping)
 - Responses cached for 5 minutes server-side
 - Cached responses don't count toward the rate limit
 
@@ -153,7 +215,7 @@ pytest tests/ -v
 
 | Layer | Tech |
 |-------|------|
-| API | Python, FastAPI, httpx |
+| API | Python, FastAPI, httpx, Pydantic |
 | Frontend | React, TypeScript, Vite, Tailwind CSS v4 |
 | Caching | In-memory async TTL cache |
 | Rate limiting | slowapi (30 req/min per IP) |
@@ -168,7 +230,9 @@ ovaso/
 ├── app/
 │   ├── main.py          # FastAPI app, endpoints, middleware
 │   ├── client.py         # RGD registry client (httpx + JWT session)
-│   ├── models.py         # Pydantic models
+│   ├── models.py         # Pydantic response models
+│   ├── web_presence.py   # Web scraping, social media detection
+│   ├── credibility.py    # Credibility score calculator + tips
 │   ├── cache.py          # Async TTL cache
 │   └── logging.py        # structlog config
 ├── web/
@@ -194,6 +258,10 @@ If you build something with Ovaso, tag [@Joshva02](https://github.com/Joshva02) 
 
 MIT
 
+## Terms & methodology
+
+See [TERMS.md](TERMS.md) for full terms of use and a detailed breakdown of how credibility scores are calculated, including point values for every signal.
+
 ## Disclaimer
 
-Data is sourced from the [Registrar General's Department](https://rgd.legalaffairs.gov.tt/ttNameSearch/). This project is open source and has no affiliation with the Government of Trinidad & Tobago.
+Data is sourced from the [Registrar General's Department](https://rgd.legalaffairs.gov.tt/ttNameSearch/) and publicly available web data. Credibility scores are algorithmic estimates and should not be used as the sole basis for business decisions. This project is open source and has no affiliation with the Government of Trinidad & Tobago.

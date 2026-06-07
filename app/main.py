@@ -15,15 +15,20 @@ from slowapi.errors import RateLimitExceeded
 
 from app.cache import TTLCache
 from app.client import RGDClient
+from app.credibility import calculate_credibility, generate_improvement_tips, get_credibility_label
 from app.logging import setup_logging, get_logger
 from app.models import (
     AvailabilityResponse,
     Company,
+    CredibilityResponse,
     HealthResponse,
     NameReservation,
     NameReservationResponse,
+    ScoreBreakdownInfo,
     SearchResponse,
+    WebPresenceInfo,
 )
+from app.web_presence import WebPresenceChecker
 
 setup_logging()
 logger = get_logger(__name__)
@@ -34,10 +39,12 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.rgd = RGDClient()
+    app.state.web_presence = WebPresenceChecker()
     app.state.cache = TTLCache(ttl=300, max_size=2000)
     logger.info("app_started")
     yield
     await app.state.rgd.close()
+    await app.state.web_presence.close()
     logger.info("app_stopped")
 
 
@@ -98,6 +105,10 @@ async def log_requests(request: Request, call_next):
 
 def _rgd(request: Request) -> RGDClient:
     return request.app.state.rgd
+
+
+def _web_presence(request: Request) -> WebPresenceChecker:
+    return request.app.state.web_presence
 
 
 def _cache(request: Request) -> TTLCache:
@@ -322,6 +333,168 @@ async def check_availability(
         exact_matches=exact_matches,
         similar_matches=similar_matches,
         reserved_names=reservations,
+    )
+
+    await cache.set(cache_key, response)
+    return response
+
+
+@app.get(
+    "/credibility",
+    response_model=CredibilityResponse,
+    tags=["Credibility"],
+    summary="Business credibility check",
+    responses={
+        200: {
+            "description": "Credibility score and breakdown",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "query": "massy holdings",
+                        "credibility_score": 78,
+                        "credibility_label": "Moderate Credibility",
+                        "is_registered": True,
+                        "registry_match": {
+                            "company_name": "MASSY HOLDINGS LTD.",
+                            "company_number": "N233(C)",
+                            "company_identifier": "124290",
+                            "record_type": "PROFIT COMPANY",
+                            "record_status": "ACTIVE (CONTINUED)",
+                            "registration_date": "07/01/1983",
+                            "street_address": "63 PARK STREET",
+                            "state": "PORT-OF-SPAIN",
+                            "building": "",
+                            "town": "",
+                        },
+                        "web_presence": {
+                            "website_url": "https://massygroup.com",
+                            "website_live": True,
+                            "website_ssl": True,
+                            "social_media": {
+                                "facebook": "https://facebook.com/massygroup",
+                                "linkedin": "https://linkedin.com/company/massy-group",
+                            },
+                            "has_maps_listing": True,
+                            "maps_url": None,
+                            "search_results_count": 15,
+                            "news_mentions": 3,
+                            "review_snippets": [],
+                        },
+                        "score_breakdown": {
+                            "registry_score": 30,
+                            "registry_max": 30,
+                            "registry_details": {
+                                "registered": True,
+                                "active": True,
+                                "years_registered": 42,
+                            },
+                            "web_presence_score": 21,
+                            "web_presence_max": 25,
+                            "web_presence_details": {},
+                            "social_media_score": 15,
+                            "social_media_max": 25,
+                            "social_media_details": {},
+                            "reviews_score": 10,
+                            "reviews_max": 20,
+                            "reviews_details": {},
+                        },
+                    }
+                }
+            },
+        },
+        429: {"description": "Rate limit exceeded"},
+        502: {"description": "RGD upstream error"},
+    },
+)
+@limiter.limit("15/minute")
+async def credibility_check(
+    request: Request,
+    name: str = Query(
+        ..., min_length=2, description="Business name to check credibility for"
+    ),
+):
+    """Check business credibility by searching the registry and the web.
+
+    Returns a credibility score out of 100 based on:
+    - **Registry (30 pts)**: Whether the business is registered, active, and how long
+    - **Web Presence (25 pts)**: Website existence, SSL, search visibility
+    - **Social Media (25 pts)**: Facebook, Instagram, LinkedIn, Twitter, Google Maps
+    - **Reviews (20 pts)**: Review mentions and sources found online
+    """
+    cache = _cache(request)
+    cache_key = f"credibility:{name.strip().lower()}"
+
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Step 1: Check registry
+    client = _rgd(request)
+    try:
+        company_results = await client.search_companies(name)
+    except Exception as e:
+        logger.error("credibility_registry_error", name=name, error=str(e))
+        raise HTTPException(status_code=502, detail=f"RGD upstream error: {e}")
+
+    companies = [Company.from_rgd(r) for r in company_results]
+    query_upper = name.strip().upper()
+    exact = [c for c in companies if c.company_name.upper() == query_upper]
+    best_match = exact[0] if exact else (companies[0] if companies else None)
+
+    is_registered = len(exact) > 0 or len(companies) > 0
+    record_status = best_match.record_status if best_match else ""
+    registration_date = best_match.registration_date if best_match else ""
+
+    # Step 2: Check web presence
+    checker = _web_presence(request)
+    search_name = best_match.company_name if best_match else name
+    web_result = await checker.check(search_name)
+
+    # Step 3: Calculate credibility score
+    breakdown = calculate_credibility(
+        is_registered=is_registered,
+        record_status=record_status,
+        registration_date=registration_date,
+        web_presence=web_result,
+    )
+
+    # Show claim prompt and tips for scores below 60
+    show_claim = breakdown.total_score < 60
+    tips = generate_improvement_tips(breakdown) if show_claim else []
+
+    response = CredibilityResponse(
+        query=name,
+        credibility_score=breakdown.total_score,
+        credibility_label=get_credibility_label(breakdown.total_score),
+        is_registered=is_registered,
+        registry_match=best_match,
+        web_presence=WebPresenceInfo(
+            website_url=web_result.website_url,
+            website_live=web_result.website_live,
+            website_ssl=web_result.website_ssl,
+            social_media=web_result.social_media,
+            has_maps_listing=web_result.has_maps_listing,
+            maps_url=web_result.maps_url,
+            search_results_count=web_result.search_results_count,
+            news_mentions=web_result.news_mentions,
+            review_snippets=web_result.review_snippets,
+        ),
+        score_breakdown=ScoreBreakdownInfo(
+            registry_score=breakdown.registry_score,
+            registry_max=breakdown.registry_max,
+            registry_details=breakdown.registry_details,
+            web_presence_score=breakdown.web_presence_score,
+            web_presence_max=breakdown.web_presence_max,
+            web_presence_details=breakdown.web_presence_details,
+            social_media_score=breakdown.social_media_score,
+            social_media_max=breakdown.social_media_max,
+            social_media_details=breakdown.social_media_details,
+            reviews_score=breakdown.reviews_score,
+            reviews_max=breakdown.reviews_max,
+            reviews_details=breakdown.reviews_details,
+        ),
+        show_claim_prompt=show_claim,
+        improvement_tips=tips,
     )
 
     await cache.set(cache_key, response)

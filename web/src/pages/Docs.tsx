@@ -22,11 +22,68 @@ const RESERVATION_FIELDS = [
 
 const ENDPOINTS = [
   {
+    id: "credibility",
+    method: "GET",
+    path: "/credibility",
+    title: "Business credibility score",
+    desc: "The flagship endpoint. Checks the RGD registry and scrapes the web to build a credibility score out of 100. Returns the score breakdown, discovered web presence, and improvement tips for low-scoring businesses. Rate limited to 15 req/min.",
+    params: [
+      { name: "name", type: "string", required: true, desc: "Business name to check credibility for (min 2 chars)" },
+    ],
+    request: `curl "${API_BASE}/credibility?name=massy+holdings"`,
+    response: `{
+  "query": "massy holdings",
+  "credibility_score": 78,
+  "credibility_label": "Moderate Credibility",
+  "is_registered": true,
+  "registry_match": {
+    "company_name": "MASSY HOLDINGS LTD.",
+    "company_number": "N233(C)",
+    "record_status": "ACTIVE (CONTINUED)",
+    "registration_date": "07/01/1983"
+  },
+  "web_presence": {
+    "website_url": "https://massygroup.com",
+    "website_live": true,
+    "website_ssl": true,
+    "social_media": {
+      "facebook": "https://facebook.com/massygroup",
+      "linkedin": "https://linkedin.com/company/massy-group"
+    },
+    "has_maps_listing": true,
+    "search_results_count": 15,
+    "news_mentions": 3
+  },
+  "score_breakdown": {
+    "registry_score": 30,
+    "registry_max": 30,
+    "web_presence_score": 21,
+    "web_presence_max": 25,
+    "social_media_score": 15,
+    "social_media_max": 25,
+    "reviews_score": 10,
+    "reviews_max": 20
+  },
+  "show_claim_prompt": false,
+  "improvement_tips": []
+}`,
+    responseFields: [
+      { field: "credibility_score", type: "number", desc: "Overall credibility score (0-100)" },
+      { field: "credibility_label", type: "string", desc: "Human-readable label (e.g. High Credibility)" },
+      { field: "is_registered", type: "boolean", desc: "Whether the business is in the RGD registry" },
+      { field: "registry_match", type: "Company | null", desc: "Best matching company record" },
+      { field: "web_presence", type: "WebPresence", desc: "Discovered website, social media, maps, reviews" },
+      { field: "score_breakdown", type: "ScoreBreakdown", desc: "Points breakdown by category" },
+      { field: "show_claim_prompt", type: "boolean", desc: "True when score < 60 (show 'Do you own this business?')" },
+      { field: "improvement_tips", type: "string[]", desc: "Actionable tips to improve the score" },
+    ],
+  },
+  {
     id: "check",
     method: "GET",
     path: "/check",
     title: "Check business registration",
-    desc: "The recommended endpoint. Returns whether a name is registered, exact matches, similar companies, and name reservations — all in one call.",
+    desc: "Returns whether a name is registered, exact matches, similar companies, and name reservations — all in one call.",
     params: [
       { name: "name", type: "string", required: true, desc: "Business name to check (min 2 chars)" },
     ],
@@ -201,7 +258,7 @@ export function Docs() {
         </h1>
         <p className="text-dark-gray text-[15px] leading-relaxed max-w-[560px] mb-4">
           Ovaso is a free, public REST API for verifying businesses registered
-          in Trinidad & Tobago. No authentication required.
+          in Trinidad & Tobago and assessing their online credibility. No authentication required.
         </p>
 
         {/* Table of contents */}
@@ -223,6 +280,11 @@ export function Docs() {
               </li>
             ))}
             <li>
+              <a href="#credibility-methodology" className="text-dark-gray hover:text-black transition-colors no-underline">
+                Credibility methodology
+              </a>
+            </li>
+            <li>
               <a href="#schemas" className="text-dark-gray hover:text-black transition-colors no-underline">
                 Schemas
               </a>
@@ -235,6 +297,11 @@ export function Docs() {
             <li>
               <a href="#rate-limiting" className="text-dark-gray hover:text-black transition-colors no-underline">
                 Rate limiting
+              </a>
+            </li>
+            <li>
+              <a href="#terms" className="text-dark-gray hover:text-black transition-colors no-underline">
+                Terms of use
               </a>
             </li>
           </ul>
@@ -322,6 +389,92 @@ export function Docs() {
           </section>
         ))}
 
+        {/* Credibility Methodology */}
+        <SectionHeading id="credibility-methodology">Credibility score methodology</SectionHeading>
+        <div className="text-[15px] text-charcoal leading-relaxed max-w-[640px] space-y-3 mb-8">
+          <p>
+            The <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">/credibility</code> endpoint
+            calculates a score from 0-100 by evaluating four categories of publicly available signals.
+          </p>
+        </div>
+
+        <div className="space-y-8 mb-8">
+          <div>
+            <h3 className="font-semibold text-[15px] mb-3">Registry (max 30 points)</h3>
+            <p className="text-[14px] text-dark-gray mb-3">Checks formal registration with the Trinidad & Tobago RGD.</p>
+            <FieldTable fields={[
+              { field: "Registered with RGD", type: "15 pts", desc: "Name search returns a matching record" },
+              { field: "Active status", type: "10 pts", desc: "Status contains ACTIVE, CONTINUED, REGISTERED, or GOOD STANDING" },
+              { field: "Registered 5+ years", type: "5 pts", desc: "Calculated from registration date" },
+              { field: "Registered 2-5 years", type: "3 pts", desc: "Calculated from registration date" },
+              { field: "Registered < 2 years", type: "1 pt", desc: "Calculated from registration date" },
+            ]} />
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-[15px] mb-3">Web Presence (max 25 points)</h3>
+            <p className="text-[14px] text-dark-gray mb-3">Evaluates the business's website and search visibility.</p>
+            <FieldTable fields={[
+              { field: "Has a website", type: "8 pts", desc: "A URL matching the business name found in search results" },
+              { field: "Website is live", type: "5 pts", desc: "HTTP request returns status below 500" },
+              { field: "Website has SSL", type: "4 pts", desc: "Final URL uses HTTPS" },
+              { field: "10+ search results", type: "4 pts", desc: "DuckDuckGo returns 10+ results" },
+              { field: "5-9 search results", type: "2 pts", desc: "DuckDuckGo returns 5-9 results" },
+              { field: "News mentions", type: "4 pts", desc: "Results include recognized news domains" },
+            ]} />
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-[15px] mb-3">Social Media (max 25 points)</h3>
+            <p className="text-[14px] text-dark-gray mb-3">Checks for profiles on major platforms.</p>
+            <FieldTable fields={[
+              { field: "Facebook", type: "5 pts", desc: "facebook.com or fb.com URL found" },
+              { field: "Instagram", type: "5 pts", desc: "instagram.com URL found" },
+              { field: "LinkedIn", type: "5 pts", desc: "linkedin.com URL found" },
+              { field: "Twitter/X", type: "5 pts", desc: "twitter.com or x.com URL found" },
+              { field: "Google Maps", type: "5 pts", desc: "Google Maps listing URL found" },
+            ]} />
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-[15px] mb-3">Reviews & Reputation (max 20 points)</h3>
+            <p className="text-[14px] text-dark-gray mb-3">Looks for review mentions across the web.</p>
+            <FieldTable fields={[
+              { field: "Has review mentions", type: "10 pts", desc: "Snippets contain review/rating keywords" },
+              { field: "Reviews on 2+ sources", type: "5 pts", desc: "Review mentions from 2+ search results" },
+              { field: "Reviews on 4+ sources", type: "5 pts", desc: "Review mentions from 4+ search results" },
+            ]} />
+          </div>
+        </div>
+
+        <div className="text-[15px] text-charcoal leading-relaxed max-w-[640px] space-y-3 mb-4">
+          <h3 className="font-semibold text-[15px] mb-3">Score labels</h3>
+          <FieldTable fields={[
+            { field: "80-100", type: "High Credibility", desc: "Strong registration, active web presence, multiple social profiles" },
+            { field: "60-79", type: "Moderate Credibility", desc: "Registered and active, with some online presence" },
+            { field: "40-59", type: "Low Credibility", desc: "May be registered but limited online footprint" },
+            { field: "20-39", type: "Very Low Credibility", desc: "Minimal verifiable information found" },
+            { field: "0-19", type: "Insufficient Data", desc: "Almost no verifiable signals found" },
+          ]} />
+        </div>
+
+        <div className="text-[15px] text-charcoal leading-relaxed max-w-[640px] space-y-3 mb-4">
+          <h3 className="font-semibold text-[15px] mb-3">Improvement tips & claim prompt</h3>
+          <p>
+            When a business scores below 60, the response includes{" "}
+            <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">show_claim_prompt: true</code>{" "}
+            and an <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">improvement_tips</code>{" "}
+            array with specific, actionable suggestions to improve the score, such as:
+          </p>
+          <ul className="list-disc pl-5 space-y-1 text-[14px]">
+            <li>Register with the RGD if not yet registered</li>
+            <li>Create a professional website with SSL (HTTPS)</li>
+            <li>Set up profiles on Facebook, Instagram, LinkedIn, and Twitter</li>
+            <li>Claim your Google Business Profile for Maps visibility</li>
+            <li>Encourage customers to leave reviews on multiple platforms</li>
+          </ul>
+        </div>
+
         {/* Schemas */}
         <SectionHeading id="schemas">Schemas</SectionHeading>
         <div className="space-y-8">
@@ -332,6 +485,37 @@ export function Docs() {
           <div>
             <h3 className="font-mono font-semibold text-[15px] mb-3">Reservation</h3>
             <FieldTable fields={RESERVATION_FIELDS} />
+          </div>
+          <div>
+            <h3 className="font-mono font-semibold text-[15px] mb-3">WebPresence</h3>
+            <FieldTable fields={[
+              { field: "website_url", type: "string | null", desc: "Discovered website URL" },
+              { field: "website_live", type: "boolean", desc: "Whether the website responds successfully" },
+              { field: "website_ssl", type: "boolean", desc: "Whether the website uses HTTPS" },
+              { field: "social_media", type: "object", desc: "Map of platform name to profile URL" },
+              { field: "has_maps_listing", type: "boolean", desc: "Whether a Google Maps listing was found" },
+              { field: "maps_url", type: "string | null", desc: "Google Maps listing URL" },
+              { field: "search_results_count", type: "number", desc: "Number of search results found" },
+              { field: "news_mentions", type: "number", desc: "Number of news article results" },
+              { field: "review_snippets", type: "object[]", desc: "Review-related search result snippets" },
+            ]} />
+          </div>
+          <div>
+            <h3 className="font-mono font-semibold text-[15px] mb-3">ScoreBreakdown</h3>
+            <FieldTable fields={[
+              { field: "registry_score", type: "number", desc: "Points earned for registry signals" },
+              { field: "registry_max", type: "number", desc: "Maximum possible registry points (30)" },
+              { field: "registry_details", type: "object", desc: "Detailed registry signal results" },
+              { field: "web_presence_score", type: "number", desc: "Points earned for web presence signals" },
+              { field: "web_presence_max", type: "number", desc: "Maximum possible web presence points (25)" },
+              { field: "web_presence_details", type: "object", desc: "Detailed web presence signal results" },
+              { field: "social_media_score", type: "number", desc: "Points earned for social media signals" },
+              { field: "social_media_max", type: "number", desc: "Maximum possible social media points (25)" },
+              { field: "social_media_details", type: "object", desc: "Detailed social media signal results" },
+              { field: "reviews_score", type: "number", desc: "Points earned for review signals" },
+              { field: "reviews_max", type: "number", desc: "Maximum possible review points (20)" },
+              { field: "reviews_details", type: "object", desc: "Detailed review signal results" },
+            ]} />
           </div>
         </div>
 
@@ -377,14 +561,41 @@ export function Docs() {
         <SectionHeading id="rate-limiting">Rate limiting</SectionHeading>
         <div className="text-[15px] text-charcoal leading-relaxed max-w-[640px] space-y-3">
           <p>
-            The API is rate-limited to <strong>30 requests per minute</strong> per
-            IP address. If you exceed this limit, you'll receive a{" "}
-            <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">429</code> response.
+            Standard endpoints are rate-limited to <strong>30 requests per minute</strong> per
+            IP address. The <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">/credibility</code> endpoint
+            is limited to <strong>15 requests per minute</strong> as it involves web scraping.
           </p>
           <p>
+            If you exceed the limit, you'll receive a{" "}
+            <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">429</code> response.
             Responses are cached server-side for 5 minutes. Repeated queries for
             the same name will be served from cache and won't count toward the
             rate limit.
+          </p>
+        </div>
+
+        {/* Terms */}
+        <SectionHeading id="terms">Terms of use</SectionHeading>
+        <div className="text-[15px] text-charcoal leading-relaxed max-w-[640px] space-y-3">
+          <p>
+            This API is provided as-is for informational purposes. Credibility scores are{" "}
+            <strong>algorithmic estimates</strong> based on publicly available data and should
+            not be used as the sole basis for business decisions.
+          </p>
+          <p>
+            A low score does not mean a business is fraudulent, and a high score does
+            not guarantee trustworthiness. Scores should be used as one input among
+            many when evaluating a business.
+          </p>
+          <p>
+            <strong>Data sources:</strong> Registry data from the Trinidad & Tobago RGD public
+            name search. Web data gathered from publicly accessible search results, websites,
+            and social media profiles. No private or restricted databases are accessed.
+          </p>
+          <p>
+            You may use this API for legitimate purposes including business verification,
+            due diligence, research, and application integration. You may not use this API
+            to harass, defame, or discriminate against any business or individual.
           </p>
         </div>
       </main>

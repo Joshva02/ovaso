@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { API_BASE } from "@/utils/config";
 
-type Endpoint = "/check" | "/search" | "/reservations";
+type Endpoint = "/credibility" | "/check" | "/search" | "/reservations";
 
 interface PlaygroundState {
   endpoint: Endpoint;
@@ -13,7 +13,7 @@ interface PlaygroundState {
 
 export function useApiPlayground() {
   const [state, setState] = useState<PlaygroundState>({
-    endpoint: "/check",
+    endpoint: "/credibility",
     query: "guardian holdings limited",
     result: null,
     loading: false,
