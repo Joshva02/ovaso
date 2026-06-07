@@ -16,7 +16,7 @@ function smoothScroll(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
   e.preventDefault();
   const target = document.querySelector(href);
   if (target) {
-    const top = target.getBoundingClientRect().top + window.scrollY - 56;
+    const top = target.getBoundingClientRect().top + window.scrollY - 92;
     window.scrollTo({ top, behavior: "smooth" });
   }
 }
@@ -52,7 +52,7 @@ export function Navbar() {
   return (
     <nav
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 bg-white/92 backdrop-blur-xl border-b transition-[border-color,box-shadow] duration-300",
+        "fixed top-9 left-0 right-0 z-50 bg-white/92 backdrop-blur-xl border-b transition-[border-color,box-shadow] duration-300",
         scrolled
           ? "border-warm-gray shadow-[0_1px_8px_rgba(0,0,0,0.04)]"
           : "border-transparent"
@@ -85,6 +85,17 @@ export function Navbar() {
             )}
           >
             Docs
+          </Link>
+          <Link
+            to="/changelog"
+            className={cn(
+              "text-[13px] font-medium transition-colors no-underline hidden sm:block",
+              location.pathname === "/changelog"
+                ? "text-black"
+                : "text-dark-gray hover:text-black"
+            )}
+          >
+            Changelog
           </Link>
           <button
             onClick={cycleTheme}

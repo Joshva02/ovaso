@@ -448,7 +448,7 @@ async def credibility_check(
     # Step 2: Check web presence
     checker = _web_presence(request)
     search_name = best_match.company_name if best_match else name
-    web_result = await checker.check(search_name)
+    web_result = await checker.check(search_name, original_query=name)
 
     # Step 3: Calculate credibility score
     breakdown = calculate_credibility(

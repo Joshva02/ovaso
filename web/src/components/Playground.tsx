@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useApiPlayground } from "@/hooks/useApiPlayground";
 import { CodeBlock } from "./ui/code-block";
-import { Loader2, Send } from "lucide-react";
+import { CredibilityReport } from "./CredibilityReport";
+import { Loader2, Send, Braces, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const ease = [0.23, 1, 0.32, 1] as const;
 const fadeUp = {
@@ -10,14 +13,27 @@ const fadeUp = {
   viewport: { once: true, amount: 0.6 },
 };
 
+type ViewMode = "report" | "json";
+
 export function Playground() {
   const { endpoint, query, result, loading, error, setEndpoint, setQuery, execute } =
     useApiPlayground();
+  const [viewMode, setViewMode] = useState<ViewMode>("report");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     execute();
   };
+
+  const isCredibility = endpoint === "/credibility";
+  const parsedCredibility = (() => {
+    if (!result || !isCredibility) return null;
+    try {
+      const parsed = JSON.parse(result);
+      if ("credibility_score" in parsed) return parsed;
+    } catch { /* not valid credibility JSON */ }
+    return null;
+  })();
 
   return (
     <section
@@ -113,17 +129,51 @@ export function Playground() {
           <AnimatePresence mode="wait">
             {result && (
               <motion.div
-                key={result}
+                key={`${result}-${viewMode}`}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3, ease }}
               >
-                <CodeBlock
-                  code={result}
-                  language="json"
-                  filename="Response"
-                />
+                {/* View toggle for credibility responses */}
+                {parsedCredibility && (
+                  <div className="flex items-center gap-1 mb-4 bg-off-white rounded-lg p-1 w-fit">
+                    <button
+                      onClick={() => setViewMode("report")}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium transition-all cursor-pointer",
+                        viewMode === "report"
+                          ? "bg-white text-black shadow-sm"
+                          : "text-dark-gray hover:text-black"
+                      )}
+                    >
+                      <FileText size={13} />
+                      Report
+                    </button>
+                    <button
+                      onClick={() => setViewMode("json")}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium transition-all cursor-pointer",
+                        viewMode === "json"
+                          ? "bg-white text-black shadow-sm"
+                          : "text-dark-gray hover:text-black"
+                      )}
+                    >
+                      <Braces size={13} />
+                      JSON
+                    </button>
+                  </div>
+                )}
+
+                {parsedCredibility && viewMode === "report" ? (
+                  <CredibilityReport data={parsedCredibility} />
+                ) : (
+                  <CodeBlock
+                    code={result}
+                    language="json"
+                    filename="Response"
+                  />
+                )}
               </motion.div>
             )}
           </AnimatePresence>

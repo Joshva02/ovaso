@@ -249,7 +249,7 @@ export function Docs() {
   return (
     <>
       <Navbar />
-      <main className="max-w-[1120px] mx-auto px-6 pt-24 pb-16">
+      <main className="max-w-[1120px] mx-auto px-6 pt-32 pb-16">
         <span className="text-[11px] font-bold tracking-[0.1em] uppercase text-tt-red mb-3 block">
           Documentation
         </span>

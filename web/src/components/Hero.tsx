@@ -21,7 +21,7 @@ function smoothScroll(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
 
 export function Hero() {
   return (
-    <section className="pt-36 pb-20 px-6 max-w-[1120px] mx-auto">
+    <section className="pt-44 pb-20 px-6 max-w-[1120px] mx-auto">
       <motion.div
         {...fadeUp}
         transition={{ duration: 0.5, delay: 0.05 }}

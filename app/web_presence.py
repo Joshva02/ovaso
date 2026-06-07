@@ -66,14 +66,45 @@ class WebPresenceChecker:
     async def close(self) -> None:
         await self._http.aclose()
 
-    async def check(self, business_name: str, country: str = "Trinidad and Tobago") -> WebPresenceResult:
-        """Run all web presence checks for a business."""
-        search_query = f"{business_name} {country}"
+    async def check(
+        self,
+        business_name: str,
+        original_query: str | None = None,
+        country: str = "Trinidad and Tobago",
+    ) -> WebPresenceResult:
+        """Run all web presence checks for a business.
 
-        search_results = await self._search_web(search_query)
+        Searches multiple name variations to maximize discovery:
+        - The original user query
+        - The registry name (cleaned of legal suffixes)
+        - Core brand name extracted from the registry name
+        """
+        name_variations = _generate_name_variations(business_name, original_query)
+        all_name_tokens = set()
+        for variation in name_variations:
+            all_name_tokens.update(variation.lower().split())
+
+        # Search all variations in parallel
+        search_tasks = [
+            self._search_web(f"{variation} {country}")
+            for variation in name_variations
+        ]
+        variation_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+        # Merge all results, deduplicating by URL
+        seen_urls: set[str] = set()
+        search_results: list[dict] = []
+        for result in variation_results:
+            if isinstance(result, Exception):
+                continue
+            for item in result:
+                url = item.get("url", "")
+                if url not in seen_urls:
+                    seen_urls.add(url)
+                    search_results.append(item)
 
         social_media = _extract_social_links(search_results)
-        website_url = _extract_business_website(search_results, business_name)
+        website_url = _extract_business_website(search_results, business_name, all_name_tokens)
         has_maps, maps_url = _extract_maps_listing(search_results)
         news_count = _count_news_mentions(search_results)
         review_snippets = _extract_review_snippets(search_results)
@@ -83,12 +114,15 @@ class WebPresenceChecker:
         if website_url:
             website_live, website_ssl = await self._check_website(website_url)
 
+        # Targeted searches for missing signals
         if not has_maps:
-            maps_results = await self._search_web(f"{business_name} {country} google maps")
+            primary_name = name_variations[0]
+            maps_results = await self._search_web(f"{primary_name} {country} google maps")
             has_maps, maps_url = _extract_maps_listing(maps_results)
 
         if not social_media:
-            social_results = await self._search_social(business_name, country)
+            primary_name = name_variations[0]
+            social_results = await self._search_social(primary_name, country)
             social_media = {**social_results, **social_media}
 
         return WebPresenceResult(
@@ -166,6 +200,59 @@ class WebPresenceChecker:
         return is_live, has_ssl
 
 
+LEGAL_SUFFIXES = re.compile(
+    r"\b(LIMITED|LTD\.?|INCORPORATED|INC\.?|COMPANY|CO\.?|CORPORATION|CORP\.?|"
+    r"ENTERPRISES?|SERVICES?|HOLDINGS?|GROUP|SOLUTIONS?|PARTNERS?|"
+    r"INTERNATIONAL|INT'?L|ASSOCIATES?|CONSULTANTS?|VENTURES?|"
+    r"TRADING|INVESTMENTS?)\b",
+    re.IGNORECASE,
+)
+
+FORMERLY_PATTERN = re.compile(r"\s+FORMERLY\s+.*", re.IGNORECASE)
+
+
+def _generate_name_variations(registry_name: str, original_query: str | None = None) -> list[str]:
+    """Generate search-friendly name variations from a registry name.
+
+    Example: "WAMNOW TECHNOLOGIES FORMERLY WAMNOW FINANCIAL LIMITED"
+    -> ["wamnow technologies", "wamnow", "WAMNOW TECHNOLOGIES"]
+    With original_query="wamnow technologies":
+    -> ["wamnow technologies", "wamnow", "WAMNOW TECHNOLOGIES"]
+    """
+    variations: list[str] = []
+    seen: set[str] = set()
+
+    def _add(name: str) -> None:
+        cleaned = " ".join(name.split()).strip()
+        if cleaned and cleaned.lower() not in seen and len(cleaned) >= 2:
+            seen.add(cleaned.lower())
+            variations.append(cleaned)
+
+    # 1. Original user query (most likely to match brand name)
+    if original_query:
+        _add(original_query)
+
+    # 2. Registry name without "FORMERLY ..." clause
+    name_without_formerly = FORMERLY_PATTERN.sub("", registry_name).strip()
+    _add(name_without_formerly)
+
+    # 3. Registry name without legal suffixes
+    core_name = LEGAL_SUFFIXES.sub("", name_without_formerly).strip()
+    core_name = re.sub(r"[.\s]+", " ", core_name).strip()
+    core_name = " ".join(core_name.split())
+    _add(core_name)
+
+    # 4. First word only (often the brand: "WAMNOW", "MASSY", "GUARDIAN")
+    first_word = core_name.split()[0] if core_name else ""
+    if len(first_word) >= 3:
+        _add(first_word)
+
+    # 5. Full registry name as fallback
+    _add(registry_name)
+
+    return variations if variations else [registry_name]
+
+
 def _parse_ddg_results(html: str) -> list[dict]:
     """Parse DuckDuckGo HTML search results into structured data."""
     results = []
@@ -216,9 +303,21 @@ def _extract_social_links(results: list[dict]) -> dict[str, str]:
     return found
 
 
-def _extract_business_website(results: list[dict], business_name: str) -> str | None:
+def _extract_business_website(
+    results: list[dict],
+    business_name: str,
+    all_name_tokens: set[str] | None = None,
+) -> str | None:
     """Find the most likely business website from search results."""
-    name_tokens = set(business_name.lower().split())
+    name_tokens = all_name_tokens or set(business_name.lower().split())
+    # Filter out very common words that cause false matches
+    stop_words = {
+        "the", "and", "of", "for", "in", "to", "a", "an", "is", "it",
+        "limited", "ltd", "inc", "company", "co", "corporation", "corp",
+        "formerly", "enterprises", "services", "holdings", "group",
+        "solutions", "international", "trinidad", "tobago",
+    }
+    meaningful_tokens = {t for t in name_tokens if len(t) > 2 and t not in stop_words}
 
     for item in results:
         url = item.get("url", "")
@@ -231,14 +330,21 @@ def _extract_business_website(results: list[dict], business_name: str) -> str | 
             continue
         if any(d in domain for d in MAPS_DOMAINS):
             continue
+        # Skip government/registry sites
+        if "gov.tt" in domain or "rgd." in domain:
+            continue
 
-        # Check if domain or title relates to business name
         title_lower = item.get("title", "").lower()
+        # Full domain (e.g. "wam.money", "wam.now") and base name
         domain_base = domain.split(".")[0] if domain else ""
 
-        if any(token in domain_base for token in name_tokens if len(token) > 2):
+        if any(token in domain_base for token in meaningful_tokens):
             return url
-        if any(token in title_lower for token in name_tokens if len(token) > 2):
+        # Also check if token appears in full domain (handles "wam" in "wam.money")
+        domain_no_tld = domain.rsplit(".", 1)[0] if "." in domain else domain
+        if any(token in domain_no_tld for token in meaningful_tokens):
+            return url
+        if any(token in title_lower for token in meaningful_tokens):
             return url
 
     return None
