@@ -18,6 +18,7 @@ from app.client import RGDClient
 from app.credibility import calculate_credibility, generate_improvement_tips, get_credibility_label
 from app.logging import setup_logging, get_logger
 from app.models import (
+    ArticleInfo,
     AvailabilityResponse,
     Company,
     CredibilityResponse,
@@ -478,6 +479,9 @@ async def credibility_check(
             search_results_count=web_result.search_results_count,
             news_mentions=web_result.news_mentions,
             review_snippets=web_result.review_snippets,
+            articles=[
+                ArticleInfo(**a) for a in web_result.articles
+            ],
         ),
         score_breakdown=ScoreBreakdownInfo(
             registry_score=breakdown.registry_score,

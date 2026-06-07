@@ -45,10 +45,11 @@ class WebPresenceResult:
     search_results_count: int = 0
     news_mentions: int = 0
     review_snippets: list[dict] = field(default_factory=list)
+    articles: list[dict] = field(default_factory=list)
 
 
 class WebPresenceChecker:
-    """Discovers a business's web presence using DuckDuckGo search."""
+    """Discovers a business's web presence by scraping Google search results."""
 
     def __init__(self) -> None:
         self._http = httpx.AsyncClient(
@@ -108,6 +109,7 @@ class WebPresenceChecker:
         has_maps, maps_url = _extract_maps_listing(search_results)
         news_count = _count_news_mentions(search_results)
         review_snippets = _extract_review_snippets(search_results)
+        articles = _extract_articles(search_results, business_name, all_name_tokens)
 
         website_live = False
         website_ssl = False
@@ -135,10 +137,31 @@ class WebPresenceChecker:
             search_results_count=len(search_results),
             news_mentions=news_count,
             review_snippets=review_snippets,
+            articles=articles,
         )
 
     async def _search_web(self, query: str) -> list[dict]:
-        """Search the web using DuckDuckGo HTML search."""
+        """Search the web using Brave Search (primary) or DuckDuckGo (fallback)."""
+        results = await self._search_brave(query)
+        if results:
+            return results
+        return await self._search_ddg(query)
+
+    async def _search_brave(self, query: str) -> list[dict]:
+        """Scrape Brave Search results page."""
+        try:
+            response = await self._http.get(
+                "https://search.brave.com/search",
+                params={"q": query},
+            )
+            response.raise_for_status()
+            return _parse_brave_results(response.text)
+        except Exception as e:
+            logger.warning("brave_search_error", query=query, error=str(e))
+            return []
+
+    async def _search_ddg(self, query: str) -> list[dict]:
+        """Search using DuckDuckGo HTML (fallback)."""
         try:
             response = await self._http.get(
                 "https://html.duckduckgo.com/html/",
@@ -147,29 +170,21 @@ class WebPresenceChecker:
             response.raise_for_status()
             return _parse_ddg_results(response.text)
         except Exception as e:
-            logger.error("web_search_error", query=query, error=str(e))
+            logger.warning("ddg_search_error", query=query, error=str(e))
             return []
 
     async def _search_social(self, business_name: str, country: str) -> dict[str, str]:
         """Search specifically for social media profiles."""
         results: dict[str, str] = {}
-        queries = [
-            (platform, f"{business_name} {country} site:{domains[0]}")
-            for platform, domains in SOCIAL_PLATFORMS.items()
-        ]
-
-        search_tasks = [self._search_web(q) for _, q in queries]
-        search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
-
-        for (platform, _), result in zip(queries, search_results):
-            if isinstance(result, Exception):
-                continue
-            for item in result:
-                url = item.get("url", "")
-                if any(d in url for d in SOCIAL_PLATFORMS[platform]):
-                    results[platform] = url
-                    break
-
+        # Single combined search is more efficient with Brave
+        social_results = await self._search_web(
+            f"{business_name} {country} facebook instagram linkedin"
+        )
+        for item in social_results:
+            url = item.get("url", "").lower()
+            for platform, domains in SOCIAL_PLATFORMS.items():
+                if platform not in results and any(d in url for d in domains):
+                    results[platform] = item["url"]
         return results
 
     async def _check_website(self, url: str) -> tuple[bool, bool]:
@@ -251,6 +266,45 @@ def _generate_name_variations(registry_name: str, original_query: str | None = N
     _add(registry_name)
 
     return variations if variations else [registry_name]
+
+
+def _parse_brave_results(html: str) -> list[dict]:
+    """Parse Brave Search results HTML into structured data."""
+    results = []
+    seen_urls: set[str] = set()
+
+    # Brave result links use class "l1" on anchor tags:
+    # <a href="URL" target="_self" class="... l1">...<span class="...title...">TITLE</span>
+    pair_pattern = re.compile(
+        r'<a\s+href="(https?://[^"]+)"[^>]*class="[^"]*\bl1\b[^"]*"[^>]*>'
+        r'.*?class="[^"]*title[^"]*"[^>]*>(.*?)</(?:span|div)>',
+        re.DOTALL,
+    )
+    pairs = pair_pattern.findall(html)
+
+    # Descriptions live in <div class="generic-snippet ...">
+    desc_pattern = re.compile(
+        r'<div[^>]*class="[^"]*generic-snippet[^"]*"[^>]*>(.*?)</div>',
+        re.DOTALL,
+    )
+    descs = desc_pattern.findall(html)
+
+    for i, (url, title_html) in enumerate(pairs):
+        parsed = urlparse(url)
+        if "brave.com" in parsed.netloc:
+            continue
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+
+        title = re.sub(r"<[^>]+>", "", title_html).strip()
+        snippet = ""
+        if i < len(descs):
+            snippet = re.sub(r"<[^>]+>", "", descs[i]).strip()
+
+        results.append({"url": url, "title": title, "snippet": snippet})
+
+    return results
 
 
 def _parse_ddg_results(html: str) -> list[dict]:
@@ -383,3 +437,67 @@ def _extract_review_snippets(results: list[dict]) -> list[dict]:
                 "url": item.get("url", ""),
             })
     return snippets
+
+
+NEWS_ARTICLE_DOMAINS = {
+    "guardian.co.tt", "trinidadexpress.com", "newsday.co.tt", "looptt.com",
+    "cnc3.co.tt", "tv6tnt.com", "ttt.live", "trinidadandtobagonewsday.com",
+    "medium.com", "techcrunch.com", "bloomberg.com", "reuters.com",
+    "bbc.com", "technewstt.com", "ground.news",
+}
+
+
+def _extract_articles(
+    results: list[dict],
+    business_name: str,
+    name_tokens: set[str] | None = None,
+) -> list[dict]:
+    """Extract news articles and press mentions about the business."""
+    tokens = name_tokens or set(business_name.lower().split())
+    stop_words = {
+        "the", "and", "of", "for", "in", "to", "a", "an", "is", "it",
+        "limited", "ltd", "inc", "company", "co", "trinidad", "tobago",
+    }
+    meaningful = {t for t in tokens if len(t) > 2 and t not in stop_words}
+
+    articles = []
+    seen_urls: set[str] = set()
+
+    for item in results:
+        url = item.get("url", "")
+        if url in seen_urls:
+            continue
+
+        domain = urlparse(url).netloc.lower().replace("www.", "")
+        title = item.get("title", "")
+        snippet = item.get("snippet", "")
+        combined = f"{title} {snippet}".lower()
+
+        # Skip social media and non-article pages
+        if any(d in domain for domains in SOCIAL_PLATFORMS.values() for d in domains):
+            continue
+        if any(d in domain for d in MAPS_DOMAINS):
+            continue
+
+        # Must mention the business in the title or snippet
+        if not any(token in combined for token in meaningful):
+            continue
+
+        # Check if it's from a known news/article domain
+        is_news_domain = any(nd in domain for nd in NEWS_ARTICLE_DOMAINS)
+        # Or has news-like URL patterns
+        is_article_url = any(
+            p in url.lower()
+            for p in ["/article", "/news/", "/business/", "/story/", "/post"]
+        )
+
+        if is_news_domain or is_article_url:
+            seen_urls.add(url)
+            articles.append({
+                "title": title,
+                "source": domain,
+                "snippet": snippet,
+                "url": url,
+            })
+
+    return articles[:10]

@@ -10,6 +10,8 @@ import {
   Building2,
   CalendarDays,
   AlertTriangle,
+  Newspaper,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +40,7 @@ interface CredibilityData {
     search_results_count: number;
     news_mentions: number;
     review_snippets: Array<{ source: string; snippet: string; url: string }>;
+    articles: Array<{ title: string; source: string; snippet: string; url: string }>;
   };
   score_breakdown: {
     registry_score: number;
@@ -55,6 +58,7 @@ interface CredibilityData {
   };
   show_claim_prompt: boolean;
   improvement_tips: string[];
+  search_powered_by: string;
 }
 
 const SOCIAL_ICONS: Record<string, { label: string; color: string }> = {
@@ -390,6 +394,37 @@ export function CredibilityReport({ data }: { data: CredibilityData }) {
         </div>
       )}
 
+      {/* Articles */}
+      {web.articles && web.articles.length > 0 && (
+        <div className="rounded-lg border border-warm-gray p-5">
+          <h4 className="text-[11px] font-bold tracking-wider uppercase text-mid-gray mb-4">
+            Articles & Press
+          </h4>
+          <div className="space-y-3">
+            {web.articles.slice(0, 8).map((article, i) => (
+              <div key={i} className="border-b border-warm-gray last:border-0 pb-3 last:pb-0">
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[13px] font-medium text-tt-red hover:underline no-underline inline-flex items-center gap-1.5 mb-1"
+                >
+                  <Newspaper size={12} className="shrink-0" />
+                  {article.title}
+                  <ExternalLink size={10} className="shrink-0" />
+                </a>
+                <p className="text-[12px] text-mid-gray font-mono">{article.source}</p>
+                {article.snippet && (
+                  <p className="text-[13px] text-dark-gray leading-relaxed mt-1">
+                    {article.snippet}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Claim Prompt + Tips */}
       {data.show_claim_prompt && data.improvement_tips.length > 0 && (
         <div className="rounded-lg border-2 border-dashed border-tt-red/30 bg-tt-red-light p-5">
@@ -412,6 +447,12 @@ export function CredibilityReport({ data }: { data: CredibilityData }) {
           </div>
         </div>
       )}
+
+      {/* Powered by attribution */}
+      <div className="flex items-center justify-center gap-1.5 pt-2 text-[11px] text-mid-gray">
+        <Search size={10} />
+        <span>Search powered by {data.search_powered_by || "Brave Search"}</span>
+      </div>
     </div>
   );
 }

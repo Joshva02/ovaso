@@ -70,6 +70,13 @@ class AvailabilityResponse(BaseModel):
     reserved_names: list[NameReservation]
 
 
+class ArticleInfo(BaseModel):
+    title: str
+    source: str
+    snippet: str
+    url: str
+
+
 class WebPresenceInfo(BaseModel):
     website_url: str | None = None
     website_live: bool = False
@@ -80,6 +87,7 @@ class WebPresenceInfo(BaseModel):
     search_results_count: int = 0
     news_mentions: int = 0
     review_snippets: list[dict] = []
+    articles: list[ArticleInfo] = []
 
 
 class ScoreBreakdownInfo(BaseModel):
@@ -110,3 +118,4 @@ class CredibilityResponse(BaseModel):
     score_breakdown: ScoreBreakdownInfo
     show_claim_prompt: bool = False
     improvement_tips: list[str] = []
+    search_powered_by: str = "Brave Search"
