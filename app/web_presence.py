@@ -31,6 +31,13 @@ EXCLUDED_DOMAINS = {
     "yelp.com", "tripadvisor.com", "bbb.org",
 }
 
+NEWS_ARTICLE_DOMAINS = {
+    "guardian.co.tt", "trinidadexpress.com", "newsday.co.tt", "looptt.com",
+    "cnc3.co.tt", "tv6tnt.com", "ttt.live", "trinidadandtobagonewsday.com",
+    "medium.com", "techcrunch.com", "bloomberg.com", "reuters.com",
+    "bbc.com", "technewstt.com", "ground.news",
+}
+
 REQUEST_TIMEOUT = 10.0
 WEBSITE_CHECK_TIMEOUT = 8.0
 
@@ -109,7 +116,7 @@ class WebPresenceChecker:
                     seen_urls.add(url)
                     search_results.append(item)
 
-        social_media = _extract_social_links(search_results)
+        social_media = _extract_social_links(search_results, all_name_tokens)
         website_url = _extract_business_website(search_results, business_name, all_name_tokens)
         has_maps, maps_url = _extract_maps_listing(search_results)
         news_count = _count_news_mentions(search_results)
@@ -325,15 +332,67 @@ def _clean_ddg_url(url: str) -> str:
     return url
 
 
-def _extract_social_links(results: list[dict]) -> dict[str, str]:
-    """Extract social media profile URLs from search results."""
-    found: dict[str, str] = {}
+def _is_profile_url(url: str, platform: str) -> bool:
+    """Check if a social media URL is a profile/page (not a post by someone else)."""
+    parsed = urlparse(url)
+    path = parsed.path.lower().rstrip("/")
+    # Posts, reels, status updates from other accounts
+    post_indicators = ["/posts/", "/p/", "/reel/", "/status/", "/videos/", "/watch"]
+    return not any(indicator in path for indicator in post_indicators)
+
+
+def _social_url_matches_business(url: str, name_tokens: set[str]) -> bool:
+    """Check if a social media URL path contains the business name."""
+    parsed = urlparse(url)
+    path = parsed.path.lower()
+    return any(token in path for token in name_tokens if len(token) >= 3)
+
+
+def _extract_social_links(
+    results: list[dict],
+    name_tokens: set[str] | None = None,
+) -> dict[str, str]:
+    """Extract social media profile URLs from search results.
+
+    Prefers profile pages that contain the business name over
+    third-party posts that merely mention the business.
+    """
+    # First pass: find profile URLs with business name in path
+    owned: dict[str, str] = {}
+    # Second pass fallback: any social link that's a profile
+    profile_fallback: dict[str, str] = {}
+    # Third pass fallback: any social link at all
+    any_fallback: dict[str, str] = {}
+
+    meaningful = {t for t in (name_tokens or set()) if len(t) >= 3}
+
     for item in results:
-        url = item.get("url", "").lower()
+        url = item.get("url", "")
+        url_lower = url.lower()
         for platform, domains in SOCIAL_PLATFORMS.items():
-            if platform not in found and any(d in url for d in domains):
-                found[platform] = item["url"]
-    return found
+            if not any(d in url_lower for d in domains):
+                continue
+
+            if platform not in owned and meaningful and _social_url_matches_business(url, meaningful):
+                owned[platform] = url
+            elif platform not in profile_fallback and _is_profile_url(url, platform):
+                profile_fallback[platform] = url
+            elif platform not in any_fallback:
+                any_fallback[platform] = url
+
+    # Merge: prefer owned > profile > any
+    merged: dict[str, str] = {}
+    all_platforms = set(owned) | set(profile_fallback) | set(any_fallback)
+    for platform in all_platforms:
+        merged[platform] = owned.get(platform) or profile_fallback.get(platform) or any_fallback[platform]
+
+    return merged
+
+
+INSTITUTIONAL_DOMAINS = {
+    "central-bank.org.tt", "cbtt.org.tt", "ttse.com", "ttsec.org.tt",
+    "news.gov.tt", "nalis.gov.tt", "ttparliament.org",
+}
 
 
 def _extract_business_website(
@@ -341,9 +400,13 @@ def _extract_business_website(
     business_name: str,
     all_name_tokens: set[str] | None = None,
 ) -> str | None:
-    """Find the most likely business website from search results."""
+    """Find the most likely business website from search results.
+
+    Only matches on the domain name containing the business name.
+    Skips news sites, social media, government, and institutional domains
+    to avoid returning articles *about* the business as its website.
+    """
     name_tokens = all_name_tokens or set(business_name.lower().split())
-    # Filter out very common words that cause false matches
     stop_words = {
         "the", "and", "of", "for", "in", "to", "a", "an", "is", "it",
         "limited", "ltd", "inc", "company", "co", "corporation", "corp",
@@ -363,21 +426,18 @@ def _extract_business_website(
             continue
         if any(d in domain for d in MAPS_DOMAINS):
             continue
-        # Skip government/registry sites
         if "gov.tt" in domain or "rgd." in domain:
             continue
+        if domain in INSTITUTIONAL_DOMAINS:
+            continue
+        # Skip news domains — those are articles about the business, not the business itself
+        if any(nd in domain for nd in NEWS_ARTICLE_DOMAINS):
+            continue
 
-        title_lower = item.get("title", "").lower()
-        # Full domain (e.g. "wam.money", "wam.now") and base name
-        domain_base = domain.split(".")[0] if domain else ""
-
-        if any(token in domain_base for token in meaningful_tokens):
-            return url
-        # Also check if token appears in full domain (handles "wam" in "wam.money")
+        # Only match on the domain containing the business name
         domain_no_tld = domain.rsplit(".", 1)[0] if "." in domain else domain
+
         if any(token in domain_no_tld for token in meaningful_tokens):
-            return url
-        if any(token in title_lower for token in meaningful_tokens):
             return url
 
     return None
@@ -416,14 +476,6 @@ def _extract_review_snippets(results: list[dict]) -> list[dict]:
                 "url": item.get("url", ""),
             })
     return snippets
-
-
-NEWS_ARTICLE_DOMAINS = {
-    "guardian.co.tt", "trinidadexpress.com", "newsday.co.tt", "looptt.com",
-    "cnc3.co.tt", "tv6tnt.com", "ttt.live", "trinidadandtobagonewsday.com",
-    "medium.com", "techcrunch.com", "bloomberg.com", "reuters.com",
-    "bbc.com", "technewstt.com", "ground.news",
-}
 
 
 def _extract_articles(
