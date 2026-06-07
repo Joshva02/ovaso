@@ -118,4 +118,4 @@ class CredibilityResponse(BaseModel):
     score_breakdown: ScoreBreakdownInfo
     show_claim_prompt: bool = False
     improvement_tips: list[str] = []
-    search_powered_by: str = "Brave Search"
+    search_powered_by: str = "Firecrawl"

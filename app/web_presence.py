@@ -5,6 +5,7 @@ social media profiles, Google Maps listing, and reviews.
 """
 
 import asyncio
+import os
 import re
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -48,8 +49,11 @@ class WebPresenceResult:
     articles: list[dict] = field(default_factory=list)
 
 
+FIRECRAWL_API_URL = "https://api.firecrawl.dev/v1/search"
+
+
 class WebPresenceChecker:
-    """Discovers a business's web presence by scraping Google search results."""
+    """Discovers a business's web presence using Firecrawl search API."""
 
     def __init__(self) -> None:
         self._http = httpx.AsyncClient(
@@ -63,6 +67,7 @@ class WebPresenceChecker:
                 ),
             },
         )
+        self._firecrawl_key = os.environ.get("FIRECRAWL_API_KEY", "")
 
     async def close(self) -> None:
         await self._http.aclose()
@@ -141,23 +146,37 @@ class WebPresenceChecker:
         )
 
     async def _search_web(self, query: str) -> list[dict]:
-        """Search the web using Brave Search (primary) or DuckDuckGo (fallback)."""
-        results = await self._search_brave(query)
-        if results:
-            return results
+        """Search the web using Firecrawl API."""
+        if self._firecrawl_key:
+            results = await self._search_firecrawl(query)
+            if results:
+                return results
         return await self._search_ddg(query)
 
-    async def _search_brave(self, query: str) -> list[dict]:
-        """Scrape Brave Search results page."""
+    async def _search_firecrawl(self, query: str) -> list[dict]:
+        """Search using Firecrawl search API."""
         try:
-            response = await self._http.get(
-                "https://search.brave.com/search",
-                params={"q": query},
+            response = await self._http.post(
+                FIRECRAWL_API_URL,
+                headers={
+                    "Authorization": f"Bearer {self._firecrawl_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"query": query, "limit": 10},
+                timeout=15.0,
             )
             response.raise_for_status()
-            return _parse_brave_results(response.text)
+            data = response.json()
+            results = []
+            for item in data.get("data", []):
+                results.append({
+                    "url": item.get("url", ""),
+                    "title": item.get("title", ""),
+                    "snippet": item.get("description", ""),
+                })
+            return results
         except Exception as e:
-            logger.warning("brave_search_error", query=query, error=str(e))
+            logger.warning("firecrawl_search_error", query=query, error=str(e))
             return []
 
     async def _search_ddg(self, query: str) -> list[dict]:
@@ -176,7 +195,6 @@ class WebPresenceChecker:
     async def _search_social(self, business_name: str, country: str) -> dict[str, str]:
         """Search specifically for social media profiles."""
         results: dict[str, str] = {}
-        # Single combined search is more efficient with Brave
         social_results = await self._search_web(
             f"{business_name} {country} facebook instagram linkedin"
         )
@@ -266,45 +284,6 @@ def _generate_name_variations(registry_name: str, original_query: str | None = N
     _add(registry_name)
 
     return variations if variations else [registry_name]
-
-
-def _parse_brave_results(html: str) -> list[dict]:
-    """Parse Brave Search results HTML into structured data."""
-    results = []
-    seen_urls: set[str] = set()
-
-    # Brave result links use class "l1" on anchor tags:
-    # <a href="URL" target="_self" class="... l1">...<span class="...title...">TITLE</span>
-    pair_pattern = re.compile(
-        r'<a\s+href="(https?://[^"]+)"[^>]*class="[^"]*\bl1\b[^"]*"[^>]*>'
-        r'.*?class="[^"]*title[^"]*"[^>]*>(.*?)</(?:span|div)>',
-        re.DOTALL,
-    )
-    pairs = pair_pattern.findall(html)
-
-    # Descriptions live in <div class="generic-snippet ...">
-    desc_pattern = re.compile(
-        r'<div[^>]*class="[^"]*generic-snippet[^"]*"[^>]*>(.*?)</div>',
-        re.DOTALL,
-    )
-    descs = desc_pattern.findall(html)
-
-    for i, (url, title_html) in enumerate(pairs):
-        parsed = urlparse(url)
-        if "brave.com" in parsed.netloc:
-            continue
-        if url in seen_urls:
-            continue
-        seen_urls.add(url)
-
-        title = re.sub(r"<[^>]+>", "", title_html).strip()
-        snippet = ""
-        if i < len(descs):
-            snippet = re.sub(r"<[^>]+>", "", descs[i]).strip()
-
-        results.append({"url": url, "title": title, "snippet": snippet})
-
-    return results
 
 
 def _parse_ddg_results(html: str) -> list[dict]:
