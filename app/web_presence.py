@@ -332,20 +332,60 @@ def _clean_ddg_url(url: str) -> str:
     return url
 
 
+def _generate_url_slugs(name_tokens: set[str]) -> set[str]:
+    """Generate URL-friendly slug variations from business name tokens.
+
+    Handles nuances like:
+    - "WamNow" -> {"wamnow", "wam", "now"}
+    - "P.H.E.A.L" -> {"pheal", "p.h.e.a.l"}
+    - "Techxture Media" -> {"techxture", "techxturemedia"}
+    """
+    slugs: set[str] = set()
+
+    for token in name_tokens:
+        lower = token.lower()
+        if len(lower) < 2:
+            continue
+
+        # Original token
+        slugs.add(lower)
+
+        # Strip all punctuation (P.H.E.A.L -> pheal)
+        stripped = re.sub(r"[^a-z0-9]", "", lower)
+        if len(stripped) >= 2:
+            slugs.add(stripped)
+
+        # Split camelCase (WamNow -> wam, now)
+        camel_parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)", token)
+        for part in camel_parts:
+            if len(part) >= 3:
+                slugs.add(part.lower())
+
+    # Filter out very short or stop-word slugs
+    stop_slugs = {
+        "the", "and", "for", "limited", "ltd", "inc", "company",
+        "trinidad", "tobago", "services", "holdings", "group",
+        "technologies", "enterprises", "solutions", "international",
+        "corporation", "corp", "formerly", "media", "partners",
+    }
+    slugs = {s for s in slugs if len(s) >= 3 and s not in stop_slugs}
+
+    return slugs
+
+
 def _is_profile_url(url: str, platform: str) -> bool:
     """Check if a social media URL is a profile/page (not a post by someone else)."""
     parsed = urlparse(url)
     path = parsed.path.lower().rstrip("/")
-    # Posts, reels, status updates from other accounts
     post_indicators = ["/posts/", "/p/", "/reel/", "/status/", "/videos/", "/watch"]
     return not any(indicator in path for indicator in post_indicators)
 
 
-def _social_url_matches_business(url: str, name_tokens: set[str]) -> bool:
+def _social_url_matches_business(url: str, slugs: set[str]) -> bool:
     """Check if a social media URL path contains the business name."""
     parsed = urlparse(url)
     path = parsed.path.lower()
-    return any(token in path for token in name_tokens if len(token) >= 3)
+    return any(slug in path for slug in slugs)
 
 
 def _extract_social_links(
@@ -357,14 +397,14 @@ def _extract_social_links(
     Prefers profile pages that contain the business name over
     third-party posts that merely mention the business.
     """
-    # First pass: find profile URLs with business name in path
+    # First pass: profile URLs with business name in path
     owned: dict[str, str] = {}
-    # Second pass fallback: any social link that's a profile
+    # Second pass: any profile page
     profile_fallback: dict[str, str] = {}
-    # Third pass fallback: any social link at all
+    # Third pass: any social link
     any_fallback: dict[str, str] = {}
 
-    meaningful = {t for t in (name_tokens or set()) if len(t) >= 3}
+    slugs = _generate_url_slugs(name_tokens or set())
 
     for item in results:
         url = item.get("url", "")
@@ -373,7 +413,7 @@ def _extract_social_links(
             if not any(d in url_lower for d in domains):
                 continue
 
-            if platform not in owned and meaningful and _social_url_matches_business(url, meaningful):
+            if platform not in owned and slugs and _social_url_matches_business(url, slugs):
                 owned[platform] = url
             elif platform not in profile_fallback and _is_profile_url(url, platform):
                 profile_fallback[platform] = url
@@ -402,18 +442,12 @@ def _extract_business_website(
 ) -> str | None:
     """Find the most likely business website from search results.
 
-    Only matches on the domain name containing the business name.
+    Only matches when the domain name contains the business name.
     Skips news sites, social media, government, and institutional domains
     to avoid returning articles *about* the business as its website.
     """
     name_tokens = all_name_tokens or set(business_name.lower().split())
-    stop_words = {
-        "the", "and", "of", "for", "in", "to", "a", "an", "is", "it",
-        "limited", "ltd", "inc", "company", "co", "corporation", "corp",
-        "formerly", "enterprises", "services", "holdings", "group",
-        "solutions", "international", "trinidad", "tobago",
-    }
-    meaningful_tokens = {t for t in name_tokens if len(t) > 2 and t not in stop_words}
+    slugs = _generate_url_slugs(name_tokens)
 
     for item in results:
         url = item.get("url", "")
@@ -430,14 +464,15 @@ def _extract_business_website(
             continue
         if domain in INSTITUTIONAL_DOMAINS:
             continue
-        # Skip news domains — those are articles about the business, not the business itself
         if any(nd in domain for nd in NEWS_ARTICLE_DOMAINS):
             continue
 
-        # Only match on the domain containing the business name
+        # Match on domain containing any slug variation
+        # e.g. "wam.money" matches slug "wam", "pheal.co" matches slug "pheal"
         domain_no_tld = domain.rsplit(".", 1)[0] if "." in domain else domain
+        domain_full = domain  # also check full domain for cases like "wam.money"
 
-        if any(token in domain_no_tld for token in meaningful_tokens):
+        if any(slug in domain_no_tld or slug in domain_full for slug in slugs):
             return url
 
     return None
