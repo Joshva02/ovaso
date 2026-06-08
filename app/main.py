@@ -183,11 +183,17 @@ async def _enrich_web_presence(
             )
             social_media[platform] = url
 
-    # Merge discovered maps listing
+    # Merge discovered maps listing (reject generic country/region URLs)
     if not has_maps and research_report.discovered_maps_url:
-        has_maps = True
-        maps_url = research_report.discovered_maps_url
-        logger.info("ai_discovered_maps", url=maps_url)
+        discovered_maps = research_report.discovered_maps_url.lower()
+        is_generic = any(
+            p in discovered_maps
+            for p in ["/maps/search/trinidad", "/maps/search/tobago", "/maps/place/trinidad"]
+        )
+        if not is_generic:
+            has_maps = True
+            maps_url = research_report.discovered_maps_url
+            logger.info("ai_discovered_maps", url=maps_url)
 
     # Merge discovered review snippets (deduplicate by URL)
     existing_urls = {r.get("url", "") for r in review_snippets}

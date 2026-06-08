@@ -118,7 +118,7 @@ class WebPresenceChecker:
 
         social_media = _extract_social_links(search_results, all_name_tokens)
         website_url = _extract_business_website(search_results, business_name, all_name_tokens)
-        has_maps, maps_url = _extract_maps_listing(search_results)
+        has_maps, maps_url = _extract_maps_listing(search_results, business_name, all_name_tokens)
         news_count = _count_news_mentions(search_results)
         review_snippets = _extract_review_snippets(search_results)
         articles = _extract_articles(search_results, business_name, all_name_tokens)
@@ -132,7 +132,7 @@ class WebPresenceChecker:
         if not has_maps:
             primary_name = name_variations[0]
             maps_results = await self._search_web(f"{primary_name} {country} google maps")
-            has_maps, maps_url = _extract_maps_listing(maps_results)
+            has_maps, maps_url = _extract_maps_listing(maps_results, business_name, all_name_tokens)
 
         if not social_media:
             primary_name = name_variations[0]
@@ -479,12 +479,50 @@ def _extract_business_website(
     return None
 
 
-def _extract_maps_listing(results: list[dict]) -> tuple[bool, str | None]:
-    """Check if any result is a Google Maps listing."""
+GENERIC_MAPS_PATTERNS = [
+    "/maps/search/trinidad",
+    "/maps/search/tobago",
+    "/maps/place/trinidad",
+    "/maps/place/tobago",
+    "/maps/@",
+]
+
+
+def _extract_maps_listing(
+    results: list[dict],
+    business_name: str = "",
+    name_tokens: set[str] | None = None,
+) -> tuple[bool, str | None]:
+    """Check if any result is a Google Maps listing for this specific business.
+
+    Rejects generic maps URLs (e.g. just "Trinidad and Tobago") that don't
+    reference the business.
+    """
+    slugs = _generate_url_slugs(name_tokens or set())
+
     for item in results:
         url = item.get("url", "").lower()
-        if any(d in url for d in MAPS_DOMAINS):
+        if not any(d in url for d in MAPS_DOMAINS):
+            continue
+
+        # Reject generic maps URLs
+        if any(p in url for p in GENERIC_MAPS_PATTERNS):
+            # Only accept if the business name is also in the URL
+            if not slugs or not any(slug in url for slug in slugs):
+                continue
+
+        # Check that the title or snippet references the business
+        title = item.get("title", "").lower()
+        snippet = item.get("snippet", "").lower()
+        combined = f"{title} {snippet} {url}"
+
+        if slugs and any(slug in combined for slug in slugs):
             return True, item["url"]
+
+        # Accept /maps/place/ URLs that contain specific place data
+        if "/maps/place/" in url and "/maps/place/trinidad" not in url:
+            return True, item["url"]
+
     return False, None
 
 
