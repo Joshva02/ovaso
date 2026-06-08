@@ -4,6 +4,7 @@ Open-source public REST API to search businesses registered with the RGD
 (Registrar General's Department) at https://rgd.legalaffairs.gov.tt
 """
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 
@@ -25,10 +26,12 @@ from app.models import (
     HealthResponse,
     NameReservation,
     NameReservationResponse,
+    ResearchReportInfo,
     ScoreBreakdownInfo,
     SearchResponse,
     WebPresenceInfo,
 )
+from app.research_agent import ResearchAgent
 from app.web_presence import WebPresenceChecker
 
 setup_logging()
@@ -41,11 +44,13 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(app: FastAPI):
     app.state.rgd = RGDClient()
     app.state.web_presence = WebPresenceChecker()
+    app.state.research_agent = ResearchAgent()
     app.state.cache = TTLCache(ttl=300, max_size=2000)
     logger.info("app_started")
     yield
     await app.state.rgd.close()
     await app.state.web_presence.close()
+    await app.state.research_agent.close()
     logger.info("app_stopped")
 
 
@@ -112,8 +117,83 @@ def _web_presence(request: Request) -> WebPresenceChecker:
     return request.app.state.web_presence
 
 
+def _research_agent(request: Request) -> ResearchAgent:
+    return request.app.state.research_agent
+
+
 def _cache(request: Request) -> TTLCache:
     return request.app.state.cache
+
+
+async def _enrich_web_presence(
+    web_result: "WebPresenceResult",
+    research_report: "ResearchReport | None",
+    checker: WebPresenceChecker,
+) -> "WebPresenceResult":
+    """Merge AI-discovered digital presence into the algorithmic web result.
+
+    The research agent often finds websites and social accounts that
+    pattern-based search misses (creative domains, alternate handles, etc.).
+    Discoveries are verified (website liveness check) before merging.
+    """
+    from app.web_presence import WebPresenceResult
+    from app.research_agent import ResearchReport
+
+    if not research_report:
+        return web_result
+
+    # Start with existing values
+    website_url = web_result.website_url
+    website_live = web_result.website_live
+    website_ssl = web_result.website_ssl
+    social_media = dict(web_result.social_media)
+    has_maps = web_result.has_maps_listing
+    maps_url = web_result.maps_url
+    review_snippets = list(web_result.review_snippets)
+
+    # Merge discovered website if we don't already have one
+    if not website_url and research_report.discovered_website:
+        website_url = research_report.discovered_website
+        # Verify the discovered website is actually live
+        website_live, website_ssl = await checker._check_website(website_url)
+        logger.info(
+            "ai_discovered_website",
+            url=website_url,
+            live=website_live,
+            ssl=website_ssl,
+        )
+
+    # Merge discovered social media (only fill gaps)
+    for platform, url in research_report.discovered_social_media.items():
+        if url and platform not in social_media:
+            social_media[platform] = url
+            logger.info("ai_discovered_social", platform=platform, url=url)
+
+    # Merge discovered maps listing
+    if not has_maps and research_report.discovered_maps_url:
+        has_maps = True
+        maps_url = research_report.discovered_maps_url
+        logger.info("ai_discovered_maps", url=maps_url)
+
+    # Merge discovered review snippets (deduplicate by URL)
+    existing_urls = {r.get("url", "") for r in review_snippets}
+    for review in research_report.discovered_review_snippets:
+        if review.get("url") and review["url"] not in existing_urls:
+            review_snippets.append(review)
+            existing_urls.add(review["url"])
+
+    return WebPresenceResult(
+        website_url=website_url,
+        website_live=website_live,
+        website_ssl=website_ssl,
+        social_media=social_media,
+        has_maps_listing=has_maps,
+        maps_url=maps_url,
+        search_results_count=web_result.search_results_count,
+        news_mentions=web_result.news_mentions,
+        review_snippets=review_snippets,
+        articles=web_result.articles,
+    )
 
 
 # --- Endpoints ---
@@ -446,22 +526,58 @@ async def credibility_check(
     record_status = best_match.record_status if best_match else ""
     registration_date = best_match.registration_date if best_match else ""
 
-    # Step 2: Check web presence
+    # Step 2: Check web presence + run AI research in parallel
     checker = _web_presence(request)
+    agent = _research_agent(request)
     search_name = best_match.company_name if best_match else name
-    web_result = await checker.check(search_name, original_query=name)
 
-    # Step 3: Calculate credibility score
+    research_context = {
+        "is_registered": is_registered,
+        "registry_name": search_name,
+        "record_status": record_status,
+        "registration_date": registration_date,
+    }
+
+    web_task = checker.check(search_name, original_query=name)
+    research_task = agent.research(name, context=research_context) if agent.available else None
+
+    if research_task:
+        web_result, research_report = await asyncio.gather(web_task, research_task)
+    else:
+        web_result = await web_task
+        research_report = None
+
+    # Step 2b: Merge AI-discovered digital presence into web result
+    # The agent often finds websites/socials that algorithmic search misses
+    # (e.g. "wamnow" → wam.now, creative domain names, alternate handles)
+    enriched_result = await _enrich_web_presence(web_result, research_report, checker)
+
+    # Step 3: Calculate credibility score using ENRICHED data
     breakdown = calculate_credibility(
         is_registered=is_registered,
         record_status=record_status,
         registration_date=registration_date,
-        web_presence=web_result,
+        web_presence=enriched_result,
     )
 
     # Show claim prompt and tips for scores below 60
     show_claim = breakdown.total_score < 60
     tips = generate_improvement_tips(breakdown) if show_claim else []
+
+    # Build research report info if available
+    research_info = None
+    if research_report and research_report.summary:
+        research_info = ResearchReportInfo(
+            summary=research_report.summary,
+            industry=research_report.industry,
+            founded=research_report.founded,
+            key_people=research_report.key_people,
+            services_products=research_report.services_products,
+            reputation_signals=research_report.reputation_signals,
+            sources=research_report.sources,
+            confidence=research_report.confidence,
+            gaps=research_report.gaps,
+        )
 
     response = CredibilityResponse(
         query=name,
@@ -470,17 +586,17 @@ async def credibility_check(
         is_registered=is_registered,
         registry_match=best_match,
         web_presence=WebPresenceInfo(
-            website_url=web_result.website_url,
-            website_live=web_result.website_live,
-            website_ssl=web_result.website_ssl,
-            social_media=web_result.social_media,
-            has_maps_listing=web_result.has_maps_listing,
-            maps_url=web_result.maps_url,
-            search_results_count=web_result.search_results_count,
-            news_mentions=web_result.news_mentions,
-            review_snippets=web_result.review_snippets,
+            website_url=enriched_result.website_url,
+            website_live=enriched_result.website_live,
+            website_ssl=enriched_result.website_ssl,
+            social_media=enriched_result.social_media,
+            has_maps_listing=enriched_result.has_maps_listing,
+            maps_url=enriched_result.maps_url,
+            search_results_count=enriched_result.search_results_count,
+            news_mentions=enriched_result.news_mentions,
+            review_snippets=enriched_result.review_snippets,
             articles=[
-                ArticleInfo(**a) for a in web_result.articles
+                ArticleInfo(**a) for a in enriched_result.articles
             ],
         ),
         score_breakdown=ScoreBreakdownInfo(
@@ -497,6 +613,7 @@ async def credibility_check(
             reviews_max=breakdown.reviews_max,
             reviews_details=breakdown.reviews_details,
         ),
+        research_report=research_info,
         show_claim_prompt=show_claim,
         improvement_tips=tips,
     )

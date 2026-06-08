@@ -1,7 +1,8 @@
 import { motion } from "motion/react";
 import { FlipText } from "./ui/flip-text";
 import { SquigglyText } from "./ui/squiggly-text";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const FLIP_WORDS = ["registered", "credible", "incorporated", "active"];
 
@@ -62,8 +63,8 @@ export function Hero() {
         transition={{ duration: 0.5, delay: 0.18 }}
         className="mt-5 text-lg text-dark-gray max-w-[480px] leading-relaxed"
       >
-        A free, public REST API to verify and score the credibility of businesses
-        in Trinidad & Tobago. No API key required — just fetch.
+        An open-source REST API to verify businesses in Trinidad & Tobago.
+        Free to search and check — upgrade to Pro for full credibility scoring.
       </motion.p>
 
       <motion.div
@@ -86,6 +87,13 @@ export function Hero() {
         >
           Try it live
         </a>
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-2 text-dark-gray text-sm font-semibold hover:text-black transition-colors no-underline"
+        >
+          <Zap size={14} />
+          Get Pro
+        </Link>
       </motion.div>
     </section>
   );

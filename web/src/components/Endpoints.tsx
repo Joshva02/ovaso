@@ -31,10 +31,11 @@ export function Endpoints() {
         transition={{ duration: 0.45, delay: 0.1, ease }}
         className="text-dark-gray text-[15px] mb-10 max-w-[520px]"
       >
-        All endpoints are public GET requests returning JSON. Base URL:{" "}
+        Free endpoints require no authentication. The{" "}
         <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">
-          https://ovaso.vercel.app
-        </code>
+          /credibility
+        </code>{" "}
+        endpoint requires a Pro plan API key.
       </motion.p>
 
       {ENDPOINTS.map((ep, i) => (
@@ -49,6 +50,7 @@ export function Endpoints() {
             method={ep.method}
             path={ep.path}
             description={ep.description}
+            tier={ep.tier}
             detail={ep.detail}
             params={ep.params}
             request={ep.request}

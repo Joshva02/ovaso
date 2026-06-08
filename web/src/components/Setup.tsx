@@ -67,8 +67,11 @@ export function Setup() {
         transition={{ duration: 0.45, delay: 0.1, ease }}
         className="text-dark-gray text-[15px] mb-10 max-w-[520px]"
       >
-        No sign-up, no API key. Just make a GET request from any language or
-        platform.
+        Free endpoints work instantly — no sign-up needed. For credibility
+        scoring, grab a Pro API key from your{" "}
+        <a href="/dashboard" className="text-tt-red hover:underline no-underline">
+          dashboard
+        </a>.
       </motion.p>
 
       <div className="space-y-4">

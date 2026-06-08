@@ -3,8 +3,9 @@ export const ENDPOINTS = [
     method: "GET" as const,
     path: "/credibility",
     description: "Business credibility score",
+    tier: "pro" as const,
     detail:
-      "Returns a credibility score out of 100 by checking the RGD registry and scraping the web for the business's website, social media profiles, Google Maps listing, and online reviews. Includes a full score breakdown and improvement tips for low-scoring businesses.",
+      "Returns a credibility score out of 100 by checking the RGD registry and scraping the web for the business's website, social media profiles, Google Maps listing, and online reviews. Includes a full score breakdown and improvement tips for low-scoring businesses. Requires a Pro plan API key.",
     params: [
       {
         name: "name",
@@ -13,7 +14,8 @@ export const ENDPOINTS = [
         description: "Business name to check credibility for (min 2 chars)",
       },
     ],
-    request: `curl "https://ovaso.onrender.com/credibility?name=massy+holdings"`,
+    request: `curl -H "X-API-Key: ovaso_xxxx_xxxx_xxxx_xxxx" \\
+  "https://ovaso.onrender.com/credibility?name=massy+holdings"`,
     response: `{
   "query": "massy holdings",
   "credibility_score": 78,
@@ -65,6 +67,7 @@ export const ENDPOINTS = [
     method: "GET" as const,
     path: "/check",
     description: "Check if a business name is registered",
+    tier: "free" as const,
     detail:
       "Returns whether the name is registered, exact matches, similar companies, and name reservations — all in one call.",
     params: [
@@ -108,6 +111,7 @@ export const ENDPOINTS = [
     method: "GET" as const,
     path: "/search",
     description: "Search registered companies",
+    tier: "free" as const,
     detail:
       "Search registered companies and businesses by name. Returns all matching records from the RGD registry.",
     params: [
@@ -151,6 +155,7 @@ export const ENDPOINTS = [
     method: "GET" as const,
     path: "/reservations",
     description: "Search name reservations",
+    tier: "free" as const,
     detail:
       "Search name reservations filed with the RGD. Check if someone already reserved a proposed business name.",
     params: [

@@ -20,6 +20,7 @@ interface EndpointCardProps {
   method: string;
   path: string;
   description: string;
+  tier?: "free" | "pro";
   detail: string;
   params: readonly Param[];
   request: string;
@@ -32,6 +33,7 @@ export function EndpointCard({
   method,
   path,
   description,
+  tier,
   detail,
   params,
   request,
@@ -58,6 +60,16 @@ export function EndpointCard({
         <span className="font-mono text-[15px] font-medium text-black">
           {path}
         </span>
+        {tier === "pro" && (
+          <span className="text-[10px] font-bold tracking-wider uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+            Pro
+          </span>
+        )}
+        {tier === "free" && (
+          <span className="text-[10px] font-bold tracking-wider uppercase bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
+            Free
+          </span>
+        )}
         <span className="text-dark-gray text-[13px] ml-auto mr-2 hidden sm:block">
           {description}
         </span>

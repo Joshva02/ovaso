@@ -2,7 +2,7 @@ import { Terminal } from "./ui/terminal";
 import { API_BASE } from "@/utils/config";
 
 const COMMANDS = [
-  `curl "${API_BASE}/credibility?name=massy+holdings"`,
+  `curl -H "X-API-Key: $OVASO_KEY" "${API_BASE}/credibility?name=massy+holdings"`,
   `curl "${API_BASE}/check?name=guardian+holdings+limited"`,
   `curl "${API_BASE}/search?name=massy"`,
   `curl "${API_BASE}/reservations?name=island"`,

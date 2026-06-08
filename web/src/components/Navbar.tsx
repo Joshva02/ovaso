@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
 import { Logo } from "@/components/Logo";
@@ -31,6 +32,7 @@ const THEME_ICON = {
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const { theme, setTheme } = useTheme();
+  const { isSignedIn } = useAuth();
   const location = useLocation();
   const isHome = location.pathname === "/";
 
@@ -108,10 +110,43 @@ export function Navbar() {
             href="https://github.com/Joshva02/ovaso"
             target="_blank"
             rel="noopener noreferrer"
-            className="bg-black text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-charcoal active:scale-[0.96] transition-all no-underline"
+            className="text-dark-gray hover:text-black text-[13px] font-medium transition-colors no-underline hidden sm:block"
           >
             GitHub
           </a>
+          {isSignedIn ? (
+            <div className="flex items-center gap-3">
+              <Link
+                to="/dashboard"
+                className={cn(
+                  "text-[13px] font-medium transition-colors no-underline hidden sm:block",
+                  location.pathname === "/dashboard"
+                    ? "text-black"
+                    : "text-dark-gray hover:text-black"
+                )}
+              >
+                Dashboard
+              </Link>
+              <UserButton
+                appearance={{
+                  elements: { avatarBox: "w-7 h-7" },
+                }}
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <SignInButton mode="modal">
+                <button className="text-dark-gray hover:text-black text-[13px] font-medium transition-colors cursor-pointer hidden sm:block">
+                  Sign in
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button className="bg-tt-red text-force-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-tt-red-deep active:scale-[0.96] transition-all cursor-pointer">
+                  Sign up
+                </button>
+              </SignUpButton>
+            </div>
+          )}
         </div>
       </div>
     </nav>

@@ -108,6 +108,18 @@ class ScoreBreakdownInfo(BaseModel):
     reviews_details: dict
 
 
+class ResearchReportInfo(BaseModel):
+    summary: str = ""
+    industry: str = ""
+    founded: str = "unknown"
+    key_people: list[dict] = []
+    services_products: list[str] = []
+    reputation_signals: dict = {}
+    sources: list[dict] = []
+    confidence: str = "low"
+    gaps: list[str] = []
+
+
 class CredibilityResponse(BaseModel):
     query: str
     credibility_score: int
@@ -116,6 +128,7 @@ class CredibilityResponse(BaseModel):
     registry_match: Company | None = None
     web_presence: WebPresenceInfo
     score_breakdown: ScoreBreakdownInfo
+    research_report: ResearchReportInfo | None = None
     show_claim_prompt: bool = False
     improvement_tips: list[str] = []
     search_powered_by: str = "Firecrawl"

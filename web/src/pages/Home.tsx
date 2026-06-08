@@ -3,6 +3,7 @@ import { Hero } from "@/components/Hero";
 import { QuickStart } from "@/components/QuickStart";
 import { Endpoints } from "@/components/Endpoints";
 import { Playground } from "@/components/Playground";
+import { Pricing } from "@/components/Pricing";
 import { Setup } from "@/components/Setup";
 import { Community } from "@/components/Community";
 import { Footer } from "@/components/Footer";
@@ -16,6 +17,7 @@ export function Home() {
         <QuickStart />
         <Endpoints />
         <Playground />
+        <Pricing />
         <Setup />
         <Community />
       </main>

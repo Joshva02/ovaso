@@ -17,15 +17,15 @@ export function AnnouncementBanner() {
         >
           <div className="max-w-[1120px] mx-auto px-6 h-9 flex items-center justify-center text-[13px] font-medium relative">
             <Link
-              to="/changelog"
+              to="/dashboard"
               className="inline-flex items-center gap-2 text-force-white no-underline hover:opacity-90 transition-opacity"
             >
               <span className="bg-white/20 text-force-white text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded">
-                New
+                Pro
               </span>
-              <span className="font-bold text-force-white">Ovaso v1.1</span>
+              <span className="font-bold text-force-white">Credibility API</span>
               <span className="hidden sm:inline font-medium text-force-white">
-                — Business Credibility Scoring is here
+                — Score any TT business out of 100. Get your API key.
               </span>
               <ArrowRight size={13} className="opacity-80" />
             </Link>
