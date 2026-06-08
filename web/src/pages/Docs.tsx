@@ -26,11 +26,23 @@ const ENDPOINTS = [
     method: "GET",
     path: "/credibility",
     title: "Business credibility score",
-    desc: "The flagship endpoint. Checks the RGD registry and scrapes the web to build a credibility score out of 100. Returns the score breakdown, discovered web presence, and improvement tips for low-scoring businesses. Rate limited to 15 req/min.",
+    desc: "The flagship endpoint. Checks the RGD registry and scrapes the web to build a credibility score out of 100. Uses AI-powered research to discover websites, social media accounts, and reviews that pattern-based search might miss. Supports two modes: search mode (just a name) and direct mode (pass a specific company from prior /search or /check results). Rate limited to 15 req/min.",
     params: [
       { name: "name", type: "string", required: true, desc: "Business name to check credibility for (min 2 chars)" },
+      { name: "company_name", type: "string", required: false, desc: "Exact company name from a prior /search or /check result. Skips registry search when provided." },
+      { name: "company_number", type: "string", required: false, desc: "Company number from a prior search result (for cache keying)" },
+      { name: "record_status", type: "string", required: false, desc: "Record status from a prior search result (e.g. ACTIVE, CONTINUED). Used with company_name for accurate scoring." },
+      { name: "registration_date", type: "string", required: false, desc: "Registration date from a prior search result (e.g. 02/07/1986). Used with company_name for age scoring." },
     ],
-    request: `curl "${API_BASE}/credibility?name=massy+holdings"`,
+    request: `# Search mode — searches registry automatically
+curl "${API_BASE}/credibility?name=massy+holdings"
+
+# Direct mode — use after selecting from /search or /check results
+# Pass the exact company details to skip the registry re-search
+curl "${API_BASE}/credibility?name=nahous\\
+  &company_name=B.+NAHOUS+%26+SONS+LIMITED\\
+  &record_status=CONTINUED\\
+  &registration_date=02/07/1986"`,
     response: `{
   "query": "massy holdings",
   "credibility_score": 78,
@@ -64,6 +76,19 @@ const ENDPOINTS = [
     "reviews_score": 10,
     "reviews_max": 20
   },
+  "research_report": {
+    "summary": "Massy Holdings is a diversified conglomerate...",
+    "industry": "Conglomerate / Retail",
+    "founded": "1923",
+    "key_people": [{"name": "...", "role": "CEO"}],
+    "services_products": ["Retail", "Gas stations", "..."],
+    "reputation_signals": {
+      "positive": ["Listed on TTSE", "..."],
+      "negative": [],
+      "neutral": ["..."]
+    },
+    "confidence": "high"
+  },
   "show_claim_prompt": false,
   "improvement_tips": []
 }`,
@@ -74,6 +99,7 @@ const ENDPOINTS = [
       { field: "registry_match", type: "Company | null", desc: "Best matching company record" },
       { field: "web_presence", type: "WebPresence", desc: "Discovered website, social media, maps, reviews" },
       { field: "score_breakdown", type: "ScoreBreakdown", desc: "Points breakdown by category" },
+      { field: "research_report", type: "ResearchReport | null", desc: "AI-powered deep research report (summary, industry, key people, reputation signals)" },
       { field: "show_claim_prompt", type: "boolean", desc: "True when score < 60 (show 'Do you own this business?')" },
       { field: "improvement_tips", type: "string[]", desc: "Actionable tips to improve the score" },
     ],
@@ -280,6 +306,11 @@ export function Docs() {
               </li>
             ))}
             <li>
+              <a href="#patterns" className="text-dark-gray hover:text-black transition-colors no-underline">
+                Common patterns
+              </a>
+            </li>
+            <li>
               <a href="#credibility-methodology" className="text-dark-gray hover:text-black transition-colors no-underline">
                 Credibility methodology
               </a>
@@ -388,6 +419,70 @@ export function Docs() {
             </div>
           </section>
         ))}
+
+        {/* Common Patterns */}
+        <SectionHeading id="patterns">Common patterns</SectionHeading>
+        <div className="text-[15px] text-charcoal leading-relaxed max-w-[640px] space-y-3 mb-8">
+          <h3 className="font-semibold text-[15px] mb-3">Search → Select → Credibility</h3>
+          <p>
+            The most common integration pattern. Search for a business, let the user pick from
+            results, then run a credibility check on the selected company.
+          </p>
+        </div>
+
+        <div className="space-y-4 mb-8">
+          <CodeBlock
+            code={`// Step 1: Search for the business
+const search = await fetch("${API_BASE}/search?name=nahous");
+const { companies } = await search.json();
+// → Returns 14 similar matches
+
+// Step 2: Show results to the user, they select one
+const selected = companies[0];
+// → { company_name: "B. NAHOUS & SONS LIMITED",
+//     record_status: "CONTINUED",
+//     registration_date: "02/07/1986", ... }
+
+// Step 3: Run credibility on the selected company
+const params = new URLSearchParams({
+  name: "nahous",
+  company_name: selected.company_name,
+  record_status: selected.record_status,
+  registration_date: selected.registration_date,
+});
+const cred = await fetch(\`${API_BASE}/credibility?\${params}\`, {
+  headers: { "X-API-Key": "ovaso_xxxx_xxxx_xxxx_xxxx" },
+});
+const report = await cred.json();
+// → { credibility_score: 45, research_report: { ... }, ... }`}
+            language="javascript"
+            filename="Search → Select → Credibility"
+          />
+        </div>
+
+        <div className="text-[15px] text-charcoal leading-relaxed max-w-[640px] space-y-3 mb-8">
+          <p>
+            <strong>Why direct mode?</strong> When you pass <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">company_name</code>,
+            the API skips the registry search (it already knows the company exists) and goes straight to
+            web presence discovery and AI research. This is faster and ensures the credibility check runs
+            on exactly the company the user selected — not a different match.
+          </p>
+        </div>
+
+        <div className="text-[15px] text-charcoal leading-relaxed max-w-[640px] space-y-3 mb-8">
+          <h3 className="font-semibold text-[15px] mb-3">AI-powered research</h3>
+          <p>
+            The <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">/credibility</code> endpoint
+            uses an AI research agent that goes beyond pattern matching. It actively searches for the
+            business's real digital footprint — even when domains and social handles don't match the
+            business name (e.g. "WamNow" → wam.money, @wam.now on Instagram).
+          </p>
+          <p>
+            AI-discovered websites and social accounts are verified and merged into the credibility score,
+            so businesses with creative branding aren't penalized. The full research report is returned in
+            the <code className="font-mono text-sm text-black bg-off-white px-1.5 py-0.5 rounded">research_report</code> field.
+          </p>
+        </div>
 
         {/* Credibility Methodology */}
         <SectionHeading id="credibility-methodology">Credibility score methodology</SectionHeading>
@@ -498,6 +593,21 @@ export function Docs() {
               { field: "search_results_count", type: "number", desc: "Number of search results found" },
               { field: "news_mentions", type: "number", desc: "Number of news article results" },
               { field: "review_snippets", type: "object[]", desc: "Review-related search result snippets" },
+            ]} />
+          </div>
+          <div>
+            <h3 className="font-mono font-semibold text-[15px] mb-3">ResearchReport</h3>
+            <p className="text-[14px] text-dark-gray mb-3">AI-generated deep research report. Included in credibility responses when available.</p>
+            <FieldTable fields={[
+              { field: "summary", type: "string", desc: "2-3 sentence overview of the business" },
+              { field: "industry", type: "string", desc: "Primary industry or sector" },
+              { field: "founded", type: "string", desc: "Year founded or 'unknown'" },
+              { field: "key_people", type: "object[]", desc: "Known founders, CEOs, directors — { name, role }" },
+              { field: "services_products", type: "string[]", desc: "What the business offers" },
+              { field: "reputation_signals", type: "object", desc: "{ positive: string[], negative: string[], neutral: string[] }" },
+              { field: "sources", type: "object[]", desc: "URLs cited in the research — { title, url }" },
+              { field: "confidence", type: "string", desc: "Research confidence: high, medium, or low" },
+              { field: "gaps", type: "string[]", desc: "Information the agent couldn't find" },
             ]} />
           </div>
           <div>
