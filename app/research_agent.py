@@ -363,6 +363,25 @@ class ResearchAgent:
         raw_social = data.get("discovered_social_media", {})
         social = {k: v for k, v in raw_social.items() if v} if raw_social else {}
 
+        # Backfill social media from sources if the agent listed them there
+        # but forgot to put them in discovered_social_media
+        SOCIAL_DOMAINS = {
+            "facebook": ["facebook.com"],
+            "instagram": ["instagram.com"],
+            "linkedin": ["linkedin.com"],
+            "twitter": ["twitter.com", "x.com"],
+        }
+        POST_INDICATORS = ["/posts/", "/p/", "/reel/", "/status/", "/videos/", "/watch"]
+        for source in data.get("sources", []):
+            url = source.get("url", "").lower()
+            for platform, domains in SOCIAL_DOMAINS.items():
+                if platform in social:
+                    continue
+                if any(d in url for d in domains):
+                    # Only use profile URLs, not posts
+                    if not any(indicator in url for indicator in POST_INDICATORS):
+                        social[platform] = source["url"]
+
         # Extract review snippets
         raw_reviews = data.get("discovered_review_snippets", [])
         reviews = [r for r in raw_reviews if isinstance(r, dict)] if raw_reviews else []

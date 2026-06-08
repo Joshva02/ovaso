@@ -413,9 +413,10 @@ def _extract_social_links(
             if not any(d in url_lower for d in domains):
                 continue
 
-            if platform not in owned and slugs and _social_url_matches_business(url, slugs):
+            is_profile = _is_profile_url(url, platform)
+            if platform not in owned and slugs and is_profile and _social_url_matches_business(url, slugs):
                 owned[platform] = url
-            elif platform not in profile_fallback and _is_profile_url(url, platform):
+            elif platform not in profile_fallback and is_profile:
                 profile_fallback[platform] = url
             elif platform not in any_fallback:
                 any_fallback[platform] = url

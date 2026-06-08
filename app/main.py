@@ -163,11 +163,25 @@ async def _enrich_web_presence(
             ssl=website_ssl,
         )
 
-    # Merge discovered social media (only fill gaps)
+    # Merge discovered social media — override if existing URL is a post/article
+    from app.web_presence import _is_profile_url
     for platform, url in research_report.discovered_social_media.items():
-        if url and platform not in social_media:
+        if not url:
+            continue
+        existing = social_media.get(platform)
+        if not existing:
+            # No existing entry — use AI discovery
             social_media[platform] = url
             logger.info("ai_discovered_social", platform=platform, url=url)
+        elif not _is_profile_url(existing, platform):
+            # Existing entry is a post/article — AI found the real profile
+            logger.info(
+                "ai_override_social",
+                platform=platform,
+                old_url=existing,
+                new_url=url,
+            )
+            social_media[platform] = url
 
     # Merge discovered maps listing
     if not has_maps and research_report.discovered_maps_url:
