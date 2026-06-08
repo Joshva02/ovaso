@@ -13,9 +13,35 @@ export const ENDPOINTS = [
         required: true,
         description: "Business name to check credibility for (min 2 chars)",
       },
+      {
+        name: "company_name",
+        type: "string",
+        required: false,
+        description: "Exact company name from /search or /check. Skips registry search when provided.",
+      },
+      {
+        name: "record_status",
+        type: "string",
+        required: false,
+        description: "Record status from search result (e.g. ACTIVE). Used with company_name for scoring.",
+      },
+      {
+        name: "registration_date",
+        type: "string",
+        required: false,
+        description: "Registration date from search result (e.g. 02/07/1986). Used with company_name.",
+      },
     ],
-    request: `curl -H "X-API-Key: ovaso_xxxx_xxxx_xxxx_xxxx" \\
-  "https://ovaso.onrender.com/credibility?name=massy+holdings"`,
+    request: `# Search mode (searches registry automatically)
+curl -H "X-API-Key: ovaso_xxxx_xxxx_xxxx_xxxx" \\
+  "https://ovaso.onrender.com/credibility?name=massy+holdings"
+
+# Direct mode (use after selecting from /search results)
+curl -H "X-API-Key: ovaso_xxxx_xxxx_xxxx_xxxx" \\
+  "https://ovaso.onrender.com/credibility?name=nahous\\
+  &company_name=B.+NAHOUS+%26+SONS+LIMITED\\
+  &record_status=CONTINUED\\
+  &registration_date=02/07/1986"`,
     response: `{
   "query": "massy holdings",
   "credibility_score": 78,

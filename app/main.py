@@ -513,6 +513,24 @@ async def credibility_check(
     name: str = Query(
         ..., min_length=2, description="Business name to check credibility for"
     ),
+    company_name: str | None = Query(
+        None,
+        description=(
+            "Exact company name from a prior /search or /check result. "
+            "When provided, skips the registry search and treats this as a "
+            "known registered business. Use this when the user selects a "
+            "specific company from search results."
+        ),
+    ),
+    company_number: str | None = Query(
+        None, description="Company number from a prior search result (for cache keying)"
+    ),
+    record_status: str | None = Query(
+        None, description="Record status from a prior search result (e.g. ACTIVE)"
+    ),
+    registration_date: str | None = Query(
+        None, description="Registration date from a prior search result (e.g. 02/07/1986)"
+    ),
 ):
     """Check business credibility by searching the registry and the web.
 
@@ -521,30 +539,57 @@ async def credibility_check(
     - **Web Presence (25 pts)**: Website existence, SSL, search visibility
     - **Social Media (25 pts)**: Facebook, Instagram, LinkedIn, Twitter, Google Maps
     - **Reviews (20 pts)**: Review mentions and sources found online
+
+    **Two modes:**
+    - **Search mode** (just `name`): Searches the registry, picks best match
+    - **Direct mode** (`name` + `company_name`): Skips search, uses the exact
+      company from a prior `/search` or `/check` result. Pass `record_status`
+      and `registration_date` from the search result for accurate scoring.
     """
+    # Use company_name for cache key if provided (more specific)
+    cache_identity = company_name or name
     cache = _cache(request)
-    cache_key = f"credibility:{name.strip().lower()}"
+    cache_key = f"credibility:{cache_identity.strip().lower()}"
 
     cached = await cache.get(cache_key)
     if cached is not None:
         return cached
 
     # Step 1: Check registry
-    client = _rgd(request)
-    try:
-        company_results = await client.search_companies(name)
-    except Exception as e:
-        logger.error("credibility_registry_error", name=name, error=str(e))
-        raise HTTPException(status_code=502, detail=f"RGD upstream error: {e}")
+    if company_name:
+        # Direct mode: caller selected a specific company from search results
+        best_match = Company(
+            company_name=company_name,
+            company_number=company_number or "",
+            company_identifier="",
+            record_type="",
+            record_status=record_status or "",
+            registration_date=registration_date or "",
+            street_address="",
+            state="",
+            building="",
+            town="",
+        )
+        is_registered = True
+        _record_status = record_status or ""
+        _registration_date = registration_date or ""
+    else:
+        # Search mode: search the registry
+        client = _rgd(request)
+        try:
+            company_results = await client.search_companies(name)
+        except Exception as e:
+            logger.error("credibility_registry_error", name=name, error=str(e))
+            raise HTTPException(status_code=502, detail=f"RGD upstream error: {e}")
 
-    companies = [Company.from_rgd(r) for r in company_results]
-    query_upper = name.strip().upper()
-    exact = [c for c in companies if c.company_name.upper() == query_upper]
-    best_match = exact[0] if exact else (companies[0] if companies else None)
+        companies = [Company.from_rgd(r) for r in company_results]
+        query_upper = name.strip().upper()
+        exact = [c for c in companies if c.company_name.upper() == query_upper]
+        best_match = exact[0] if exact else (companies[0] if companies else None)
 
-    is_registered = len(exact) > 0 or len(companies) > 0
-    record_status = best_match.record_status if best_match else ""
-    registration_date = best_match.registration_date if best_match else ""
+        is_registered = len(exact) > 0 or len(companies) > 0
+        _record_status = best_match.record_status if best_match else ""
+        _registration_date = best_match.registration_date if best_match else ""
 
     # Step 2: Check web presence + run AI research in parallel
     checker = _web_presence(request)
@@ -554,8 +599,8 @@ async def credibility_check(
     research_context = {
         "is_registered": is_registered,
         "registry_name": search_name,
-        "record_status": record_status,
-        "registration_date": registration_date,
+        "record_status": _record_status,
+        "registration_date": _registration_date,
     }
 
     web_task = checker.check(search_name, original_query=name)
@@ -575,8 +620,8 @@ async def credibility_check(
     # Step 3: Calculate credibility score using ENRICHED data
     breakdown = calculate_credibility(
         is_registered=is_registered,
-        record_status=record_status,
-        registration_date=registration_date,
+        record_status=_record_status,
+        registration_date=_registration_date,
         web_presence=enriched_result,
     )
 
